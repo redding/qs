@@ -1,6 +1,6 @@
 # Qs
 
-TODO: Write a gem description
+Setup message queues.  Run jobs and events.  Profit.
 
 ## Usage
 

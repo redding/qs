@@ -6,11 +6,11 @@ require "qs/version"
 Gem::Specification.new do |gem|
   gem.name        = "qs"
   gem.version     = Qs::VERSION
-  gem.authors     = ["TODO: authors"]
-  gem.email       = ["TODO: emails"]
-  gem.description = %q{TODO: Write a gem description}
-  gem.summary     = %q{TODO: Write a gem summary}
-  gem.homepage    = "http://github.com/__/qs"
+  gem.authors     = ["Kelly Redding", "Collin Redding"]
+  gem.email       = ["kelly@kellyredding.com", "collin.redding@me.com"]
+  gem.description = %q{Define message queues. Process jobs and events. Profit.}
+  gem.summary     = %q{Define message queues. Process jobs and events. Profit.}
+  gem.homepage    = "http://github.com/redding/qs"
 
   gem.files         = `git ls-files`.split($/)
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
