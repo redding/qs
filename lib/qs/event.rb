@@ -46,7 +46,7 @@ module Qs
     end
 
     def to_job(dest=nil)
-      # TODO dest ||= I::Events.distributor
+      # TODO dest ||= Qs.distributor
       queue_class   = dest.nil? ? 'QueueClass'   : dest.queue_class
       handler_class = dest.nil? ? 'HandlerClass' : dest.handler_class
       Qs::Job.new(queue_class, handler_class, self.to_job_args)

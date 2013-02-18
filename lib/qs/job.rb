@@ -2,12 +2,6 @@ module Qs
 
   class Job
 
-    # TODO: move to an engine handler
-    # def self.from_queue(queue_class, *queue_args)
-    #   data = QueueJobData.new(*queue_args)
-    #   Job.new(queue_class, data.handler_class_string, data.handler_args_hash)
-    # end
-
     attr_reader :queue_class, :handler_class, :handler_args
 
     def initialize(*args)
