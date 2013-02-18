@@ -12,8 +12,8 @@ class Qs::Event
 
     should have_readers   :channel, :name, :args
     should have_accessors :publisher, :published_at
-    should have_class_method :from_job
     should have_instance_methods :key, :validate!, :published?
+    should have_class_method :from_job
 
     should "know its channel, name, and args" do
       assert_equal 'something', subject.channel

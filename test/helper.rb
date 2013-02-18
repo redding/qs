@@ -4,4 +4,5 @@
 # add the root dir to the load path
 $LOAD_PATH.unshift(File.expand_path("../..", __FILE__))
 
-# TODO: put test helpers here...
+require 'test/support/job_handlers'
+require 'test/support/event_handlers'
