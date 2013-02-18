@@ -4,7 +4,51 @@ Setup message queues.  Run jobs and events.  Profit.
 
 ## Usage
 
-TODO: Write code samples and usage instructions here
+TODO: fill out code snippets with details
+
+Define a queue:
+
+```ruby
+# in config/queues.rb
+
+class MyQueue
+  include Qs::Queue
+
+  name 'main'
+
+  job :do_something,  "MyJobs::DoSomething"
+
+end
+```
+
+Define a handler for `DoSomething`:
+
+```ruby
+module MyJobs
+  class DoSomething
+    include Qs::JobHandler
+
+    def run!
+      # do something
+    end
+
+  end
+end
+```
+
+Submit jobs to the queue with a payload:
+
+```ruby
+MyQueue.add :do_something, {:some => 'payload'}
+```
+
+Run a worker to handle jobs on the queue:
+
+```
+$ qs start main
+```
+
+Qs is a framework for running message queues.  There APIs for both submitting bg jobs and publishing and subscribing to event jobs.
 
 ## Installation
 
