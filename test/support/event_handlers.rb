@@ -17,7 +17,7 @@ module MyTestApp::EventHandlers
   #   include Qs::EventHandler
 
   #   def init!
-  #     @redis = Qs::RedisConnection.new
+  #     @redis = Qs::RedisConnection.new(Qs.config.redis)
   #   end
 
   #   def run!

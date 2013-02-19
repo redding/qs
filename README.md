@@ -48,7 +48,13 @@ Run a worker to handle jobs on the queue:
 $ qs start main
 ```
 
-Qs is a framework for running message queues.  There APIs for both submitting bg jobs and publishing and subscribing to event jobs.
+Qs is a framework for running message queues.  There are APIs for both submitting bg jobs and publishing and subscribing to event jobs.
+
+TODO: code snippets for both adding jobs and publishing events
+
+# Redis
+
+TODO: add a note about redis usage and connecting
 
 ## Installation
 
