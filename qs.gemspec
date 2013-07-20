@@ -11,6 +11,7 @@ Gem::Specification.new do |gem|
   gem.description = %q{Define message queues. Process jobs and events. Profit.}
   gem.summary     = %q{Define message queues. Process jobs and events. Profit.}
   gem.homepage    = "http://github.com/redding/qs"
+  gem.license     = 'MIT'
 
   gem.files         = `git ls-files`.split($/)
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
