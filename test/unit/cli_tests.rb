@@ -1,6 +1,8 @@
 require 'assert'
 require 'qs/cli'
 
+require 'qs/daemon'
+
 class Qs::CLI
 
   class BaseTests < Assert::Context
@@ -22,6 +24,22 @@ class Qs::CLI
                  "        --version\n" \
                  "        --help\n"
       assert_equal expected, subject.help
+    end
+
+  end
+
+  class RunWithConfigFileTests < BaseTests
+    desc "run with a config file"
+    setup do
+      @config_file_path = SUPPORT_PATH.join("config_files/valid.qs").to_s
+      Qs::Config.stubs(:parse).with(@config_file).returns(Qs::Daemon.new)
+    end
+    teardown do
+      Qs::Config.unstub(:parse)
+    end
+
+    should "parse the config file" do
+      assert_nothing_raised{ @cli.run([ @config_file ]) }
     end
 
   end
@@ -56,6 +74,22 @@ class Qs::CLI
     desc "on a CLI error"
     setup do
       @exception = Qs::CLIRB::Error.new("no config file")
+      @cli.stubs(:run!).raises(@exception)
+      @cli.run
+    end
+
+    should "print out the exception message, the help and exit with a 1" do
+      assert_equal "#{@exception.message}\n\n", subject.puts_messages[0]
+      assert_equal subject.help, subject.puts_messages[1]
+      assert_equal 1, subject.exit_status_code
+    end
+
+  end
+
+  class OnInvalidConfigFileErrorTests < BaseTests
+    desc "on an invalid config file error"
+    setup do
+      @exception = Qs::Config::InvalidError.new("invalid config file")
       @cli.stubs(:run!).raises(@exception)
       @cli.run
     end
