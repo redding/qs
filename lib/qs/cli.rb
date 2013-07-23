@@ -1,3 +1,5 @@
+require 'qs/daemon'
+
 module Qs
 
   class CLI
@@ -19,7 +21,7 @@ module Qs
         puts help
       rescue CLIRB::VersionExit
         puts Qs::VERSION
-      rescue CLIRB::Error => exception
+      rescue Qs::Config::InvalidError, CLIRB::Error => exception
         puts "#{exception.message}\n\n"
         puts help
         exit(1)
@@ -41,8 +43,67 @@ module Qs
 
     def run!(*args)
       @cli.parse!(*args)
-      # config_file = Qs::ConfigFile.new(*@cli.args)
-      # Qs::Process.run(config_file.daemon)
+      command          = @cli.args.pop || 'run'
+      config_file_path = @cli.args.pop || 'config.qs'
+      daemon = Qs::Config.parse(config_file_path).daemon
+      # Qs::Process.call(command, daemon)
+    end
+
+  end
+
+  class Config
+
+    def self.parse(file_path)
+      self.new(file_path)
+    end
+
+    def initialize(file_path)
+      @file_path = build_file_path(file_path)
+      @daemon    = nil
+      self.instance_eval(File.read(@file_path), @file_path, 1)
+    end
+
+    def run(daemon)
+      @daemon = daemon
+    end
+
+    def daemon
+      if @daemon.kind_of?(Qs::Daemon)
+        @daemon
+      else
+        raise NoDaemonError.new(@daemon, @file_path)
+      end
+    end
+
+    private
+
+    def build_file_path(path)
+      full_path = File.expand_path(path)
+      raise NoConfigFileError.new(full_path) unless File.exists?(full_path)
+      full_path
+    rescue NoConfigFileError
+      full_path_with_qs = "#{full_path}.qs"
+      raise unless File.exists?(full_path_with_qs)
+      full_path_with_qs
+    end
+
+    InvalidError = Class.new(StandardError)
+
+    class NoConfigFileError < InvalidError
+      def initialize(path)
+        super "A configuration file couldn't be found at: #{path.to_s.inspect}"
+      end
+    end
+
+    class NoDaemonError < InvalidError
+      def initialize(daemon, path)
+        prefix = "Configuration file #{path.to_s.inspect}"
+        if daemon
+          super "#{prefix} called `run` without a Qs::Daemon"
+        else
+          super "#{prefix} didn't call `run` with a Qs::Daemon"
+        end
+      end
     end
 
   end
