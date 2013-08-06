@@ -8,4 +8,5 @@ require 'pry' # require pry for debugging (`binding.pry`)
 require 'assert-mocha' if defined?(Assert)
 
 require 'pathname'
-SUPPORT_PATH = Pathname.new(File.expand_path('../support', __FILE__))
+ROOT         = Pathname.new(File.expand_path('../..', __FILE__))
+SUPPORT_PATH = ROOT.join('test/support')

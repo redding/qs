@@ -1,4 +1,5 @@
 require 'qs/daemon'
+require 'qs/process'
 
 module Qs
 
@@ -21,7 +22,7 @@ module Qs
         puts help
       rescue CLIRB::VersionExit
         puts Qs::VERSION
-      rescue Qs::Config::InvalidError, CLIRB::Error => exception
+      rescue Qs::Process::InvalidError, Qs::Config::InvalidError, CLIRB::Error => exception
         puts "#{exception.message}\n\n"
         puts help
         exit(1)
@@ -46,7 +47,7 @@ module Qs
       command          = @cli.args.pop || 'run'
       config_file_path = @cli.args.pop || 'config.qs'
       daemon = Qs::Config.parse(config_file_path).daemon
-      # Qs::Process.call(command, daemon)
+      Qs::Process.call(command, daemon)
     end
 
   end
