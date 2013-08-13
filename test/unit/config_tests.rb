@@ -5,7 +5,7 @@ require 'qs/daemon'
 
 class Qs::Config
 
-  class BaseTests < Assert::Context
+  class UnitTests < Assert::Context
     desc "Qs::Config"
     setup do
       @file_path = SUPPORT_PATH.join('config_files/valid.qs')
@@ -17,13 +17,15 @@ class Qs::Config
     should have_cmeths :parse
 
     should "set the daemon with #run" do
-      my_daemon = Qs::Daemon.new
+      my_daemon_class = Class.new{ include Qs::Daemon }
+      my_daemon = my_daemon_class.new
       subject.run my_daemon
       assert_equal my_daemon, subject.daemon
     end
 
     should "return the daemon set with `run` using #daemon" do
-      assert_instance_of Qs::Daemon, subject.daemon
+      # `MyDaemon` is defined in `valid.qs`
+      assert_instance_of MyDaemon, subject.daemon
     end
 
     should "build a new config file and return it with #parse" do
@@ -33,7 +35,7 @@ class Qs::Config
 
   end
 
-  class WithoutQsTests < BaseTests
+  class WithoutQsTests < UnitTests
     desc "with a path string that doesn't end in .qs, but the file does"
     setup do
       @file_path = SUPPORT_PATH.join('config_files/valid')
@@ -42,12 +44,13 @@ class Qs::Config
     should "find the file and parse it" do
       config = nil
       assert_nothing_raised{ config = Qs::Config.new(@file_path) }
-      assert_instance_of Qs::Daemon, config.daemon
+      # `MyDaemon` is defined in `valid.qs`
+      assert_instance_of MyDaemon, subject.daemon
     end
 
   end
 
-  class NoFileTests < BaseTests
+  class NoFileTests < UnitTests
     desc "with a path string for a file that doesn't exist"
     setup do
       @file_path = SUPPORT_PATH.join('dont_exist')
@@ -75,7 +78,7 @@ class Qs::Config
 
   end
 
-  class NoRunTests < BaseTests
+  class NoRunTests < UnitTests
     desc "with a config file that doesn't call `run`"
     setup do
       @file_path = SUPPORT_PATH.join('config_files/empty.qs')
@@ -93,7 +96,7 @@ class Qs::Config
 
   end
 
-  class InvalidDaemonTests < BaseTests
+  class InvalidDaemonTests < UnitTests
     desc "with a config file that calls `run` but not with a Qs::Daemon"
     setup do
       @file_path = SUPPORT_PATH.join('config_files/invalid.qs')

@@ -58,10 +58,26 @@ module Qs
       self.new(file_path)
     end
 
+    # The `Config` evaluates the file and creates a proc using it's contents.
+    # This is a trick borrowed from Rack. This is essentially converting a file
+    # into a proc and then instance eval'ing it. This has a couple benefits and
+    # produces a less confusing outcome:
+    # * The obvious benefit is the file is evaluated in the context of this
+    #   `Config`. This allows the file to call `run` and kick-off running a Qs
+    #   process.
+    # * The other benefit is that the file's contents behave like they were a
+    #   proc defined by the user. Previously, when I instance eval'd the file
+    #   directly, any constants defined in it were namespaced by the instance
+    #   of the config, which is very confusing. I'm not sure what other
+    #   "effects" this might have had but I believe this is why Rack does it
+    #   this way. The proc is created in the `TOPLEVEL_BINDING` which is how the
+    #   constants are defined correctly using this method.
+
     def initialize(file_path)
       @file_path = build_file_path(file_path)
       @daemon    = nil
-      self.instance_eval(File.read(@file_path), @file_path, 1)
+      build_proc = eval("proc{ #{File.read(@file_path)} }", TOPLEVEL_BINDING, @file_path, 0)
+      self.instance_eval(&build_proc)
     end
 
     def run(daemon)
