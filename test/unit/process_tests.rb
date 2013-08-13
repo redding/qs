@@ -11,7 +11,7 @@ class Qs::Process
   class UnitTests < Assert::Context
     desc "Qs::Process"
     setup do
-      @daemon = Qs::Daemon.new
+      @daemon = ProcessTestsDaemon.new
       @daemon.queue_name = "test__main"
       @daemon.logger     = Logger.new(File.open(ROOT.join("log/test.log"), 'w'))
       @daemon.pid_file   = ROOT.join("tmp/test.pid")
@@ -262,6 +262,10 @@ class Qs::Process
       assert_equal expected, exception.message
     end
 
+  end
+
+  class ProcessTestsDaemon
+    include Qs::Daemon
   end
 
 end

@@ -1,3 +1,7 @@
 require 'qs'
 
-run Qs::Daemon.new # MyQueue
+class MyDaemon
+  include Qs::Daemon
+end
+
+run MyDaemon.new
