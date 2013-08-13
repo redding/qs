@@ -14,7 +14,6 @@ class Qs::Process
       @daemon = ProcessTestsDaemon.new
       @daemon.queue_name = "test__main"
       @daemon.logger     = Logger.new(File.open(ROOT.join("log/test.log"), 'w'))
-      @daemon.pid_file   = ROOT.join("tmp/test.pid")
       @daemon.redis_ip   = "0.0.0.0"
       @daemon.redis_port = 1234
       @process = Qs::Process.new(@daemon)
@@ -266,6 +265,8 @@ class Qs::Process
 
   class ProcessTestsDaemon
     include Qs::Daemon
+
+    pid_file ROOT.join("tmp/test.pid")
   end
 
 end
