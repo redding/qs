@@ -70,7 +70,7 @@ class Qs::Process
 
     def shutdown_thread
       if @process_thread && @process_thread.alive?
-        @daemon.signal_stop
+        @daemon.stop
         @process_thread.join
       end
     end
@@ -95,7 +95,7 @@ class Qs::Process
     end
 
     should "remove the PID file when it exits" do
-      @daemon.signal_stop
+      @daemon.stop
       @process_thread.join
       assert_not File.exists?(@daemon.pid_file)
     end
@@ -117,7 +117,7 @@ class Qs::Process
 
       trap_call.block.call
       @process_thread.join
-      assert @daemon.in_stop_state?
+      assert @daemon.stopped?
       assert_not @daemon.running?
     end
 
@@ -127,7 +127,7 @@ class Qs::Process
 
       trap_call.block.call
       @process_thread.join
-      assert @daemon.in_halt_state?
+      assert @daemon.halted?
       assert_not @daemon.running?
     end
 
@@ -137,7 +137,7 @@ class Qs::Process
 
       trap_call.block.call
       @process_thread.join
-      assert @daemon.in_restart_state?
+      assert @daemon.stopped?
       assert_not @daemon.running?
 
       # should have restarted the current process
