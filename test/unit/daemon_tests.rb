@@ -49,8 +49,6 @@ module Qs::Daemon
   class StartTests < UnitTests
     desc "when started"
     setup do
-      @check_for_signals_proc_called = 0
-      @daemon.check_for_signals_proc = proc{ @check_for_signals_proc_called += 1 }
       @thread = @daemon.start
     end
     teardown do
@@ -68,9 +66,103 @@ module Qs::Daemon
       assert @thread.alive?
     end
 
+  end
+
+  class CheckSignalProcTests < UnitTests
+    desc "when given a check for signals proc and started"
+    setup do
+      @check_for_signals_proc_called = 0
+      @daemon.check_for_signals_proc = proc{ @check_for_signals_proc_called += 1 }
+      @thread = @daemon.start
+    end
+    teardown do
+      @daemon.stop
+    end
+
     should "call `check_for_signals_proc` as part of it's work loop" do
       @thread.join(0.1)
       assert @check_for_signals_proc_called > 0
+    end
+
+  end
+
+  class WorkLoopWithWorkTests < UnitTests
+    desc "when there's work on the queue and it's started"
+    setup do
+      @queue.stubs(:fetch_job).tap do |s|
+        s.with(@daemon_class.configuration.wait_timeout)
+        s.returns('test')
+      end
+      @spy_worker = SpyWorker.new
+      Qs::Worker.stubs(:new).tap do |s|
+        s.with(@queue, @daemon_class.configuration.error_procs)
+        s.returns(@spy_worker)
+      end
+      @thread = @daemon.start
+    end
+    teardown do
+      @daemon.stop
+      Qs::Worker.unstub(:new)
+    end
+
+    should "fetch jobs from the queue and build a `Worker` to process them" do
+      @thread.join(0.1)
+      assert @spy_worker.processed_jobs.size > 0
+    end
+
+  end
+
+  class WorkLoopNoWorkersAvailableTests < UnitTests
+    desc "when there are no workers available and it's started"
+    setup do
+      worker_pool = DatWorkerPool.new(0, 0){ }
+      DatWorkerPool.stubs(:new).returns(worker_pool)
+
+      @spy_worker = SpyWorker.new
+      Qs::Worker.stubs(:new).tap do |s|
+        s.with(@queue, @daemon_class.configuration.error_procs)
+        s.returns(@spy_worker)
+      end
+      @thread = @daemon.start
+    end
+    teardown do
+      @daemon.stop
+      Qs::Worker.unstub(:new)
+      DatWorkerPool.unstub(:new)
+    end
+
+    should "not process any jobs since there are no workers" do
+      @thread.join(0.1)
+      assert_equal 0, @spy_worker.processed_jobs.size
+    end
+
+  end
+
+  class WorkLoopQueueNotEmptyTests < UnitTests
+    desc "when the queue is never empty and it's started"
+    setup do
+      worker_pool = DatWorkerPool.new(0, 0){ }
+      DatWorkerPool.stubs(:new).returns(worker_pool)
+      worker_pool.stubs(:worker_available?).returns(true)
+      worker_pool.stubs(:queue_empty?).returns(false)
+
+      @spy_worker = SpyWorker.new
+      Qs::Worker.stubs(:new).tap do |s|
+        s.with(@queue, @daemon_class.configuration.error_procs)
+        s.returns(@spy_worker)
+      end
+      @thread = @daemon.start
+    end
+    teardown do
+      @daemon.stop
+      Qs::Worker.unstub(:new)
+      DatWorkerPool.unstub(:new)
+    end
+
+    should "not fetch any jobs (and then process them) because " \
+           "there's jobs on the queue" do
+      @thread.join(0.1)
+      assert_equal 0, @spy_worker.processed_jobs.size
     end
 
   end
@@ -83,6 +175,7 @@ module Qs::Daemon
     end
 
     should "set the daemon's state to stopped" do
+      @thread.join(0.1)
       assert subject.stopped?
       assert_not subject.running?
       assert_not subject.halted?
@@ -103,6 +196,7 @@ module Qs::Daemon
     end
 
     should "set the daemon's state to halted" do
+      @thread.join(0.1)
       assert subject.halted?
       assert_not subject.running?
       assert_not subject.stopped?
@@ -131,6 +225,27 @@ module Qs::Daemon
     should "allow waiting for the daemon to shutdown using #halt" do
       subject.halt(true)
       assert_not @thread.alive?
+    end
+
+  end
+
+  class ShutdownWorkerPoolTests < UnitTests
+    desc "when the work loop is stopped"
+    setup do
+      @daemon_class.configuration.shutdown_timeout = 10
+      @daemon = @daemon_class.new
+      @spy_worker_pool = SpyWorkerPool.new
+      DatWorkerPool.stubs(:new).returns(@spy_worker_pool)
+      @thread = @daemon.start
+      @daemon.stop(true)
+    end
+    teardown do
+      DatWorkerPool.unstub(:new)
+    end
+
+    should "shutdown the worker pool with the configured timeout" do
+      assert @spy_worker_pool.shutdown_called
+      assert_equal 10, @spy_worker_pool.shutdown_timeout
     end
 
   end
@@ -195,6 +310,31 @@ module Qs::Daemon
       assert_equal 15, subject.shutdown_timeout
     end
 
+  end
+
+  class SpyWorker
+    attr_reader :processed_jobs
+    def initialize
+      @processed_jobs = []
+      @mutex = Mutex.new
+    end
+    def run(job)
+      @mutex.synchronize{ @processed_jobs << job }
+    end
+  end
+
+  class SpyWorkerPool
+    attr_reader :shutdown_called, :shutdown_timeout
+    def initialize
+      @shutdown_called = false
+      @shutdown_timeout = nil
+    end
+    def shutdown(timeout)
+      @shutdown_called = true
+      @shutdown_timeout = timeout
+    end
+    def worker_available?; false; end
+    def queue_empty?;      false; end
   end
 
 end

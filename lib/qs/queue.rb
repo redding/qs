@@ -11,4 +11,9 @@ class Qs::Queue
     @mappings = []
   end
 
+  def fetch_job(timeout = nil)
+    sleep(timeout) if timeout
+    'test'
+  end
+
 end

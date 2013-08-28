@@ -69,10 +69,9 @@ class Qs::Process
     end
 
     def shutdown_thread
-      if @process_thread && @process_thread.alive?
-        @daemon.stop
-        @process_thread.join
-      end
+      @daemon.stop(true)
+      @process_thread.join if @process_thread
+      @process_thread = nil
     end
 
   end
@@ -95,7 +94,7 @@ class Qs::Process
     end
 
     should "remove the PID file when it exits" do
-      @daemon.stop
+      @daemon.stop(true)
       @process_thread.join
       assert_not File.exists?(@daemon.pid_file)
     end
@@ -273,7 +272,7 @@ class Qs::Process
     queue ProcessTestsQueue
     pid_file ROOT.join("tmp/test.pid")
     workers 1
-    wait_timeout 0.1
+    wait_timeout 0.5
   end
 
 end
