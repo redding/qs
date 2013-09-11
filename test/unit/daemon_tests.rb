@@ -7,25 +7,29 @@ module Qs::Daemon
     desc "Qs::Daemon"
     setup do
       @daemon_class = Class.new{ include Qs::Daemon }
+      @queue = @daemon_class.configuration.queue
       @daemon = @daemon_class.new
     end
     subject{ @daemon }
 
     should have_cmeths :configuration
+    should have_cmeths :queue
     should have_cmeths :pid_file
     should have_cmeths :min_workers, :max_workers, :workers
     should have_cmeths :wait_timeout, :shutdown_timeout
 
-    should have_imeths :pid_file
-
-    should "build it's configuration from it's class's configuration" do
-      @daemon_class.configuration.pid_file = 'test.pid'
-      daemon = @daemon_class.new
-      assert_equal 'test.pid', daemon.configuration.pid_file
-    end
+    should have_readers :queue_name, :pid_file, :logger
 
     should "return it's configuration's pid file with #pid_file" do
-      assert_equal subject.configuration.pid_file, subject.pid_file
+      assert_equal @daemon_class.configuration.pid_file, subject.pid_file
+    end
+
+    should "return it's configuration's queue's name with #queue_name" do
+      assert_equal @queue.name, subject.queue_name
+    end
+
+    should "return it's queue's logger with #logger" do
+      assert_equal @queue.logger, subject.logger
     end
 
   end
@@ -33,12 +37,10 @@ module Qs::Daemon
   class ValidateConfigurationTests < UnitTests
     desc "with an invalid config"
     setup do
-      config = mock('Qs::Daemon::Configuration')
-      Configuration.stubs(:new).returns(config)
-      config.stubs(:validate!).raises(StandardError)
+      @daemon_class.configuration.stubs(:validate!).raises(StandardError)
     end
     teardown do
-      Configuration.unstub(:new)
+      @daemon_class.configuration.unstub(:validate!)
     end
 
     should "validate the configuration when initialized" do
@@ -53,6 +55,12 @@ module Qs::Daemon
 
     should "return an instance of a Configuration with #configuration" do
       assert_instance_of Configuration, subject.configuration
+    end
+
+    should "allow reading/writing the configuration's queue" do
+      test_queue = Qs::Queue.new
+      assert_nothing_raised{ subject.queue test_queue }
+      assert_equal test_queue, subject.queue
     end
 
     should "allow reading/writing the configuration's pid file" do

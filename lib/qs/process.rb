@@ -38,7 +38,7 @@ module Qs
         @daemon       = daemon
         @queue_name   = @daemon.queue_name
         @logger       = @daemon.logger
-        @process_name = ProcessName.new(@daemon)
+        @process_name = ProcessName.new(@queue_name)
         @pid_file     = PIDFile.new(@daemon.pid_file)
         @restart_cmd  = RestartCmd.new
       end
@@ -147,8 +147,8 @@ module Qs
     end
 
     class ProcessName < String
-      def initialize(daemon)
-        super "qs_#{daemon.queue_name}_#{daemon.redis_ip}_#{daemon.redis_port}"
+      def initialize(queue_name)
+        super "qs_#{queue_name}"
       end
     end
 

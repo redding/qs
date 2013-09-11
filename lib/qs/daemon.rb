@@ -64,6 +64,11 @@ module Qs::Daemon
       @configuration ||= Configuration.new
     end
 
+    def queue(new_queue = nil)
+      self.configuration.queue = new_queue if new_queue
+      self.configuration.queue
+    end
+
     def pid_file(*args)
       self.configuration.pid_file(*args)
     end
@@ -93,23 +98,23 @@ module Qs::Daemon
 
   module InstanceMethods
 
-    attr_reader :configuration
+    attr_reader :queue_name, :pid_file, :logger
 
     def initialize
-      @configuration = Configuration.new(self.class.configuration.to_hash)
-      @configuration.validate!
+      self.class.configuration.tap do |c|
+        c.validate!
+        @pid_file   = c.pid_file
+        @queue      = c.queue
+        @queue_name = @queue.name
+        @logger     = @queue.logger
+      end
 
       # TODO - state and signal handling
       set_state :init
       @signal_queue ||= []
     end
 
-    def pid_file
-      @configuration.pid_file
-    end
-
     # This is all temporary
-    attr_accessor :queue_name, :logger, :redis_ip, :redis_port
     attr_accessor :thread, :state
 
     def run

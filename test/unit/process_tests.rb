@@ -2,6 +2,7 @@ require 'assert'
 require 'qs/process'
 
 require 'qs/daemon'
+require 'qs/queue'
 require 'logger'
 require 'thread'
 require 'test/support/spy'
@@ -12,10 +13,6 @@ class Qs::Process
     desc "Qs::Process"
     setup do
       @daemon = ProcessTestsDaemon.new
-      @daemon.queue_name = "test__main"
-      @daemon.logger     = Logger.new(File.open(ROOT.join("log/test.log"), 'w'))
-      @daemon.redis_ip   = "0.0.0.0"
-      @daemon.redis_port = 1234
       @process = Qs::Process.new(@daemon)
     end
     subject{ @process }
@@ -90,7 +87,7 @@ class Qs::Process
     end
 
     should "set the process name" do
-      assert_equal "qs_test__main_0.0.0.0_1234", $0
+      assert_equal "qs_test__main", $0
     end
 
     should "have written the PID file" do
@@ -263,10 +260,20 @@ class Qs::Process
 
   end
 
+  # TODO - this is not a finalized method for creating queues
+  ProcessTestsQueue = Qs::Queue.new.tap do |q|
+    q.name   = "test__main"
+    q.logger = Logger.new(File.open(ROOT.join("log/test.log"), 'w')).tap do |l|
+      l.level = Logger::DEBUG
+    end
+  end
+
   class ProcessTestsDaemon
     include Qs::Daemon
-
+    queue ProcessTestsQueue
     pid_file ROOT.join("tmp/test.pid")
+    workers 1
+    wait_timeout 0.1
   end
 
 end
