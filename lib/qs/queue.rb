@@ -1,3 +1,5 @@
+require 'logger'
+
 module Qs; end
 class Qs::Queue
 
@@ -5,6 +7,7 @@ class Qs::Queue
   attr_accessor :name, :logger, :mappings
 
   def initialize
+    @logger ||= Logger.new(File.open("/dev/null", 'w'))
     @mappings = []
   end
 

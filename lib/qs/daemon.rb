@@ -99,71 +99,79 @@ module Qs::Daemon
   module InstanceMethods
 
     attr_reader :queue_name, :pid_file, :logger
+    attr_writer :check_for_signals_proc
 
     def initialize
       self.class.configuration.tap do |c|
         c.validate!
-        @pid_file   = c.pid_file
-        @queue      = c.queue
-        @queue_name = @queue.name
-        @logger     = @queue.logger
+        @pid_file     = c.pid_file
+        @wait_timeout = c.wait_timeout
+        @queue        = c.queue
       end
+      @queue_name = @queue.name
+      @logger     = @queue.logger
+      @check_for_signals_proc = proc{ }
 
-      # TODO - state and signal handling
-      set_state :init
-      @signal_queue ||= []
+      @work_loop_thread = nil
+      set_state :stop
     end
 
-    # This is all temporary
-    attr_accessor :thread, :state
-
-    def run
+    def start
       set_state :run
-      @thread = Thread.new do
-        loop do
-          break if !@state.run?
-          sleep 0.5
-          handle_signal(@signal_queue.pop) unless @signal_queue.empty?
-        end
-      end
+      @work_loop_thread ||= Thread.new{ work_loop }
     end
 
-    def join_thread
-      @thread.join
+    def stop(wait = false)
+      set_state :stop
+      wait_for_shutdown if wait
     end
 
-    def signal_stop
-      @signal_queue << :stop
-    end
-
-    def signal_halt
-      @signal_queue << :halt
-    end
-
-    def signal_restart
-      @signal_queue << :restart
+    def halt(wait = false)
+      set_state :halt
+      wait_for_shutdown if wait
     end
 
     def running?
-      @thread && @thread.alive?
+      @work_loop_thread && @work_loop_thread.alive?
     end
 
-    def in_stop_state?
+    def stopped?
       @state.stop?
     end
 
-    def in_halt_state?
+    def halted?
       @state.halt?
-    end
-
-    def in_restart_state?
-      @state.restart?
     end
 
     private
 
-    def handle_signal(signal)
-      set_state(signal)
+    def work_loop
+      @logger.debug "Starting work loop..."
+      # TODO this is not complete
+      while @state.run?
+        check_for_signals
+        sleep @wait_timeout # TODO this is temporary
+      end
+      @logger.debug "Stopping work loop..."
+    rescue Exception => exception
+      @logger.error "Exception occurred, stopping server!"
+      @logger.error "#{exception.class}: #{exception.message}"
+      @logger.error exception.backtrace.join("\n")
+    ensure
+      clear_thread
+      @logger.debug "Stopped work loop"
+    end
+
+    def check_for_signals
+      @check_for_signals_proc.call(self)
+    end
+
+    def clear_thread
+      @work_loop_thread = nil
+    end
+
+    def wait_for_shutdown
+      @work_loop_thread.join if @work_loop_thread
     end
 
     def set_state(name)
@@ -172,27 +180,13 @@ module Qs::Daemon
 
   end
 
-  # TODO - not sure what I want to do with the state handling yet
   class State
-    def initialize(name)
-      @name = name.to_sym
-      # TODO - validation
+    def initialize(value)
+      @symbol = value.to_sym
     end
 
-    def run?
-      @name == :run
-    end
-
-    def restart?
-      @name == :restart
-    end
-
-    def stop?
-      @name == :stop
-    end
-
-    def halt?
-      @name == :halt
+    [ :run, :stop, :halt ].each do |name|
+      define_method("#{name}?"){ @symbol == name }
     end
   end
 
