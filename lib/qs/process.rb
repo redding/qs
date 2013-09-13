@@ -41,6 +41,8 @@ module Qs
         @process_name = ProcessName.new(@queue_name)
         @pid_file     = PIDFile.new(@daemon.pid_file)
         @restart_cmd  = RestartCmd.new
+        @signal = nil
+        @signal_queue = []
       end
 
       def run(daemonize = false)
@@ -50,14 +52,15 @@ module Qs
         @pid_file.write
         log "PID: #{::Process.pid}"
 
-        ::Signal.trap("TERM"){ @daemon.signal_stop }
-        ::Signal.trap("INT"){  @daemon.signal_halt }
-        ::Signal.trap("USR2"){ @daemon.signal_restart }
+        @daemon.check_for_signals_proc = proc{ check_signal_queue }
+        ::Signal.trap("TERM"){ @signal_queue << :stop }
+        ::Signal.trap("INT"){  @signal_queue << :halt }
+        ::Signal.trap("USR2"){ @signal_queue << :restart }
 
-        @daemon.run
+        thread = @daemon.start
         log "#{@queue_name} daemon started and ready."
-        @daemon.join_thread
-        restart if @daemon.in_restart_state?
+        thread.join
+        restart if @signal == :restart
       rescue RuntimeError => exception
         log "Error: #{exception.message}"
         log "#{@queue_name} daemon never started."
@@ -69,6 +72,16 @@ module Qs
 
       def log(message)
         @logger.info "[Qs] #{message}"
+      end
+
+      def check_signal_queue
+        @signal = @signal_queue.pop
+        case @signal
+        when :stop, :restart
+          @daemon.stop
+        when :halt
+          @daemon.halt
+        end
       end
 
       def restart
