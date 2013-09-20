@@ -164,8 +164,8 @@ module Qs::Daemon
 
     def work_loop
       @logger.debug "Starting work loop..."
-      @worker_pool = DatWorkerPool.new(@min_workers, @max_workers) do |job|
-        process(job)
+      @worker_pool = DatWorkerPool.new(@min_workers, @max_workers) do |encoded_job|
+        process(encoded_job)
       end
       while started?
         check_for_signals
