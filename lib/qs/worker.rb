@@ -11,7 +11,7 @@ module Qs
     def initialize(queue, error_procs = nil)
       @queue  = queue
       @logger = @queue.logger
-      @error_handler = Qs::ErrorHandler.new(error_procs, @queue)
+      @error_handler = Qs::ErrorHandler.new(@queue, error_procs)
     end
 
     def run(encoded_job)

@@ -78,7 +78,7 @@ class Qs::Worker
 
       @spy_runner.stubs(:run).raises(@exception)
       Qs::ErrorHandler.stubs(:new).tap do |s|
-        s.with(@error_procs, @queue)
+        s.with(@queue, @error_procs)
         s.returns(@spy_error_handler)
       end
 
