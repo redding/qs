@@ -1,7 +1,10 @@
+require 'dat-worker-pool'
 require 'ns-options'
 require 'ns-options/boolean'
+require 'thread'
 
 require 'qs/queue'
+require 'qs/worker'
 
 module Qs; end
 module Qs::Daemon
@@ -104,15 +107,21 @@ module Qs::Daemon
     def initialize
       self.class.configuration.tap do |c|
         c.validate!
-        @pid_file     = c.pid_file
-        @wait_timeout = c.wait_timeout
-        @queue        = c.queue
+        @pid_file         = c.pid_file
+        @min_workers      = c.min_workers
+        @max_workers      = c.max_workers
+        @wait_timeout     = c.wait_timeout
+        @shutdown_timeout = c.shutdown_timeout
+        @error_procs      = c.error_procs
+        @queue            = c.queue
       end
       @queue_name = @queue.name
       @logger     = @queue.logger
       @check_for_signals_proc = proc{ }
 
       @work_loop_thread = nil
+      @worker_pool      = nil
+      @mutex = Mutex.new
       set_state :stop
     end
 
@@ -135,24 +144,35 @@ module Qs::Daemon
       @work_loop_thread && @work_loop_thread.alive?
     end
 
+    def started?
+      @mutex.synchronize{ @state.run? }
+    end
+
     def stopped?
-      @state.stop?
+      @mutex.synchronize{ @state.stop? }
     end
 
     def halted?
-      @state.halt?
+      @mutex.synchronize{ @state.halt? }
     end
 
     private
 
+    def process(job)
+      Qs::Worker.new(@queue, @error_procs).run(job)
+    end
+
     def work_loop
       @logger.debug "Starting work loop..."
-      # TODO this is not complete
-      while @state.run?
+      @worker_pool = DatWorkerPool.new(@min_workers, @max_workers) do |job|
+        process(job)
+      end
+      while started?
         check_for_signals
-        sleep @wait_timeout # TODO this is temporary
+        @worker_pool.add_work fetch_job
       end
       @logger.debug "Stopping work loop..."
+      shutdown_worker_pool if !halted?
     rescue Exception => exception
       @logger.error "Exception occurred, stopping server!"
       @logger.error "#{exception.class}: #{exception.message}"
@@ -166,6 +186,25 @@ module Qs::Daemon
       @check_for_signals_proc.call(self)
     end
 
+    def fetch_job
+      if @worker_pool.worker_available? && @worker_pool.queue_empty?
+        @queue.fetch_job(@wait_timeout)
+      else
+        sleep(@wait_timeout); nil
+      end
+    end
+
+    def shutdown_worker_pool
+      # TODO - tweak, run every job off the worker-pool's queue (in-memory)
+      # SystemTimer.timeout(@shutdown_timeout) do
+      #   sleep(@wait_timeout) while !@worker_pool.queue_empty?
+      # end
+      # @worker_pool.shutdown(0)
+      @logger.debug "Shutting down worker pool, letting it finish..."
+      @worker_pool.shutdown(@shutdown_timeout)
+      @worker_pool = nil
+    end
+
     def clear_thread
       @work_loop_thread = nil
     end
@@ -175,7 +214,7 @@ module Qs::Daemon
     end
 
     def set_state(name)
-      @state = State.new(name)
+      @mutex.synchronize{ @state = State.new(name) }
     end
 
   end

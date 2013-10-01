@@ -11,35 +11,36 @@ module Qs
     end
 
     def initialize(daemon)
-      @daemon = daemon
+      @daemon   = daemon
+      @pid_file = PIDFile.new(@daemon.pid_file)
     end
 
     def call(command)
       case command.to_sym
       when :run
-        DaemonHandler.run(@daemon, false)
+        DaemonHandler.run(@daemon, @pid_file, false)
       when :start
-        DaemonHandler.run(@daemon, true)
+        DaemonHandler.run(@daemon, @pid_file, true)
       when :stop
-        Signal.send("TERM", @daemon)
+        Signal.send("TERM", @pid_file.pid)
       when :restart
-        Signal.send("USR2", @daemon)
+        Signal.send("USR2", @pid_file.pid)
       else
         raise InvalidError, "Unknown command: #{command.inspect}"
       end
     end
 
     class DaemonHandler
-      def self.run(daemon, daemonize_process)
-        self.new(daemon).run(daemonize_process)
+      def self.run(daemon, pid_file, daemonize_process)
+        self.new(daemon, pid_file).run(daemonize_process)
       end
 
-      def initialize(daemon)
+      def initialize(daemon, pid_file)
         @daemon       = daemon
         @queue_name   = @daemon.queue_name
         @logger       = @daemon.logger
+        @pid_file     = pid_file
         @process_name = ProcessName.new(@queue_name)
-        @pid_file     = PIDFile.new(@daemon.pid_file)
         @restart_cmd  = RestartCmd.new
         @signal = nil
         @signal_queue = []
@@ -108,18 +109,16 @@ module Qs
     end
 
     class Signal
-      def self.send(signal, daemon)
-        self.new(signal, daemon).send
+      def self.send(signal, pid)
+        self.new(signal).send_to(pid)
       end
 
-      def initialize(signal, daemon)
-        @signal   = signal
-        @daemon   = daemon
-        @pid_file = PIDFile.new(@daemon.pid_file)
+      def initialize(signal)
+        @signal = signal
       end
 
-      def send
-        ::Process.kill(@signal, @pid_file.pid)
+      def send_to(pid)
+        ::Process.kill(@signal, pid)
       end
     end
 
