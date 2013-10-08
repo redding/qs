@@ -121,39 +121,26 @@ module Qs::Daemon
 
       @work_loop_thread = nil
       @worker_pool      = nil
-      @mutex = Mutex.new
-      set_state :stop
+      @signal = Signal.new(:stop)
     end
 
     def start
-      set_state :run
+      @signal.set :start
       @work_loop_thread ||= Thread.new{ work_loop }
     end
 
     def stop(wait = false)
-      set_state :stop
+      @signal.set :stop
       wait_for_shutdown if wait
     end
 
     def halt(wait = false)
-      set_state :halt
+      @signal.set :halt
       wait_for_shutdown if wait
     end
 
     def running?
       @work_loop_thread && @work_loop_thread.alive?
-    end
-
-    def started?
-      @mutex.synchronize{ @state.run? }
-    end
-
-    def stopped?
-      @mutex.synchronize{ @state.stop? }
-    end
-
-    def halted?
-      @mutex.synchronize{ @state.halt? }
     end
 
     private
@@ -167,12 +154,12 @@ module Qs::Daemon
       @worker_pool = DatWorkerPool.new(@min_workers, @max_workers) do |encoded_job|
         process(encoded_job)
       end
-      while started?
-        check_for_signals
+      while @signal.start?
         @worker_pool.add_work fetch_job
+        check_for_signals
       end
       @logger.debug "Stopping work loop..."
-      shutdown_worker_pool if !halted?
+      shutdown_worker_pool unless @signal.halt?
     rescue Exception => exception
       @logger.error "Exception occurred, stopping server!"
       @logger.error "#{exception.class}: #{exception.message}"
@@ -213,19 +200,28 @@ module Qs::Daemon
       @work_loop_thread.join if @work_loop_thread
     end
 
-    def set_state(name)
-      @mutex.synchronize{ @state = State.new(name) }
-    end
-
   end
 
-  class State
+  class Signal
     def initialize(value)
-      @symbol = value.to_sym
+      @value = value
+      @mutex = Mutex.new
     end
 
-    [ :run, :stop, :halt ].each do |name|
-      define_method("#{name}?"){ @symbol == name }
+    def set(value)
+      @mutex.synchronize{ @value = value }
+    end
+
+    def start?
+      @mutex.synchronize{ @value == :start }
+    end
+
+    def stop?
+      @mutex.synchronize{ @value == :stop }
+    end
+
+    def halt?
+      @mutex.synchronize{ @value == :halt }
     end
   end
 

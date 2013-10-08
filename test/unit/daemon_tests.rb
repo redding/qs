@@ -24,7 +24,7 @@ module Qs::Daemon
     should have_writers :check_for_signals_proc
 
     should have_imeths :start, :stop, :halt
-    should have_imeths :running?, :stopped?, :halted?
+    should have_imeths :running?
 
     should "return it's configuration's pid file with #pid_file" do
       assert_equal @daemon_class.configuration.pid_file, subject.pid_file
@@ -39,9 +39,7 @@ module Qs::Daemon
     end
 
     should "be stopped by default" do
-      assert subject.stopped?
       assert_not subject.running?
-      assert_not subject.halted?
     end
 
   end
@@ -55,10 +53,8 @@ module Qs::Daemon
       @daemon.stop
     end
 
-    should "set the daemon's state to running" do
+    should "be running" do
       assert subject.running?
-      assert_not subject.stopped?
-      assert_not subject.halted?
     end
 
     should "return a the daemon's work loop thread" do
@@ -71,6 +67,8 @@ module Qs::Daemon
   class CheckSignalProcTests < UnitTests
     desc "when given a check for signals proc and started"
     setup do
+      @daemon_class.wait_timeout 0
+      @daemon = @daemon_class.new
       @check_for_signals_proc_called = 0
       @daemon.check_for_signals_proc = proc{ @check_for_signals_proc_called += 1 }
       @thread = @daemon.start
@@ -174,11 +172,9 @@ module Qs::Daemon
       @daemon.stop
     end
 
-    should "set the daemon's state to stopped" do
+    should "no longer be running" do
       @thread.join(0.1)
-      assert subject.stopped?
       assert_not subject.running?
-      assert_not subject.halted?
     end
 
     should "stop the daemon's work loop thread" do
@@ -195,11 +191,9 @@ module Qs::Daemon
       @daemon.halt
     end
 
-    should "set the daemon's state to halted" do
+    should "no longer be running" do
       @thread.join(0.1)
-      assert subject.halted?
       assert_not subject.running?
-      assert_not subject.stopped?
     end
 
     should "stop the daemon's work loop thread" do
