@@ -116,7 +116,6 @@ class Qs::Process
 
       trap_call.block.call
       @process_thread.join
-      assert @daemon.stopped?
       assert_not @daemon.running?
     end
 
@@ -126,7 +125,6 @@ class Qs::Process
 
       trap_call.block.call
       @process_thread.join
-      assert @daemon.halted?
       assert_not @daemon.running?
     end
 
@@ -136,7 +134,6 @@ class Qs::Process
 
       trap_call.block.call
       @process_thread.join
-      assert @daemon.stopped?
       assert_not @daemon.running?
 
       # should have restarted the current process
