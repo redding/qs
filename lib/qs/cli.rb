@@ -10,29 +10,29 @@ module Qs
       self.new.run(*args)
     end
 
-    def initialize
-      @cli = CLIRB.new do
-        # TODO - port, queue name, number of threads, etc...
-      end
+    def initialize(kernel = nil)
+      @kernel = kernel || Kernel
+      @cli = CLIRB.new
     end
 
     def run(*args)
-      begin
-        run!(*args)
-      rescue CLIRB::HelpExit
-        puts help
-      rescue CLIRB::VersionExit
-        puts Qs::VERSION
-      rescue Qs::Process::InvalidError, Qs::Config::InvalidError, CLIRB::Error => exception
-        puts "#{exception.message}\n\n"
-        puts help
-        exit(1)
-      rescue Exception => exception
-        puts "#{exception.class}: #{exception.message}"
-        puts exception.backtrace.join("\n") if ENV['DEBUG']
-        exit(1)
-      end
-      exit(0)
+      run!(*args)
+      @kernel.exit 0
+    rescue CLIRB::HelpExit
+      @kernel.puts help
+      @kernel.exit 0
+    rescue CLIRB::VersionExit
+      @kernel.puts Qs::VERSION
+      @kernel.exit 0
+    rescue Qs::Process::InvalidError, Qs::Config::InvalidError,
+           CLIRB::Error => exception
+      @kernel.puts "#{exception.message}\n\n"
+      @kernel.puts help
+      @kernel.exit 1
+    rescue Exception => exception
+      @kernel.puts "#{exception.class}: #{exception.message}"
+      @kernel.puts exception.backtrace.join("\n") if ENV['DEBUG']
+      @kernel.exit 1
     end
 
     def help
