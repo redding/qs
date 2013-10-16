@@ -14,9 +14,8 @@ class Qs::Config
     subject{ @config }
 
     should have_imeths :run, :daemon
-    should have_cmeths :parse
 
-    should "set the daemon with #run" do
+    should "set its daemon with #run" do
       my_daemon_class = Class.new{ include Qs::Daemon }
       my_daemon = my_daemon_class.new
       subject.run my_daemon
@@ -28,11 +27,6 @@ class Qs::Config
       assert_instance_of MyDaemon, subject.daemon
     end
 
-    should "build a new config file and return it with #parse" do
-      config = Qs::Config.parse(@file_path)
-      assert_instance_of Qs::Config, config
-    end
-
   end
 
   class WithoutQsTests < UnitTests
@@ -41,11 +35,11 @@ class Qs::Config
       @file_path = SUPPORT_PATH.join('config_files/valid')
     end
 
-    should "find the file and parse it" do
+    should "find the file and eval it" do
       config = nil
       assert_nothing_raised{ config = Qs::Config.new(@file_path) }
       # `MyDaemon` is defined in `valid.qs`
-      assert_instance_of MyDaemon, subject.daemon
+      assert_instance_of MyDaemon, config.daemon
     end
 
   end
@@ -82,12 +76,11 @@ class Qs::Config
     desc "with a config file that doesn't call `run`"
     setup do
       @file_path = SUPPORT_PATH.join('config_files/empty.qs')
-      @config    = Qs::Config.new(@file_path)
     end
 
     should "raise a NoDaemon error" do
       exception = nil
-      begin; subject.daemon; rescue Exception => exception; end
+      begin; Qs::Config.new(@file_path); rescue Exception => exception; end
       assert_instance_of Qs::Config::NoDaemonError, exception
       expected_message = "Configuration file #{@file_path.to_s.inspect} " \
                          "didn't call `run` with a Qs::Daemon"
@@ -97,15 +90,14 @@ class Qs::Config
   end
 
   class InvalidDaemonTests < UnitTests
-    desc "with a config file that calls `run` but not with a Qs::Daemon"
+    desc "with a config file that calls `run` but not with a daemon"
     setup do
       @file_path = SUPPORT_PATH.join('config_files/invalid.qs')
-      @config    = Qs::Config.new(@file_path)
     end
 
     should "raise a NoDaemon error" do
       exception = nil
-      begin; subject.daemon; rescue Exception => exception; end
+      begin; Qs::Config.new(@file_path); rescue Exception => exception; end
       assert_instance_of Qs::Config::NoDaemonError, exception
       expected_message = "Configuration file #{@file_path.to_s.inspect} " \
                          "called `run` without a Qs::Daemon"

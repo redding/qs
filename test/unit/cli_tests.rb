@@ -3,6 +3,7 @@ require 'qs/cli'
 
 require 'qs/daemon'
 require 'qs/process'
+require 'qs/version'
 require 'test/support/spy'
 
 class Qs::CLI
