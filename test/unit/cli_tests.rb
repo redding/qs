@@ -4,19 +4,14 @@ require 'qs/cli'
 require 'qs/daemon'
 require 'qs/process'
 require 'qs/version'
-require 'test/support/spy'
 
 class Qs::CLI
 
   class UnitTests < Assert::Context
     desc "Qs::CLI"
     setup do
-      @cli = Qs::CLI.new
-
-      @cli_spy = Spy.new(@cli).tap do |s|
-        s.track(:puts)
-        s.track(:exit)
-      end
+      @kernel_spy = KernelSpy.new
+      @cli = Qs::CLI.new(@kernel_spy)
     end
     subject{ @cli }
 
@@ -40,10 +35,8 @@ class Qs::CLI
     end
 
     should "print out the help output and exit with a 0" do
-      puts_call = @cli_spy.method(:puts).calls.first
-      exit_call = @cli_spy.method(:exit).calls.first
-      assert_equal subject.help, puts_call.args[0]
-      assert_equal 0, exit_call.args[0]
+      assert_equal subject.help, @kernel_spy.output
+      assert_equal 0, @kernel_spy.exit_status
     end
 
   end
@@ -55,35 +48,30 @@ class Qs::CLI
     end
 
     should "print out the version and exit with a 0" do
-      puts_call = @cli_spy.method(:puts).calls.first
-      exit_call = @cli_spy.method(:exit).calls.first
-      assert_equal Qs::VERSION, puts_call.args[0]
-      assert_equal 0, exit_call.args[0]
+      assert_equal Qs::VERSION, @kernel_spy.output
+      assert_equal 0, @kernel_spy.exit_status
     end
 
   end
 
   class OnCLIErrorTests < UnitTests
-    desc "on a CLI error"
+    desc "when run raises a CLI error"
     setup do
-      @exception = Qs::CLIRB::Error.new("no config file")
+      @exception = Qs::CLIRB::Error.new("something went wrong")
       @cli.stubs(:run!).raises(@exception)
       @cli.run
     end
 
     should "print out the exception message, the help and exit with a 1" do
-      error_puts_call = @cli_spy.method(:puts).calls[0]
-      help_puts_call  = @cli_spy.method(:puts).calls[1]
-      exit_call = @cli_spy.method(:exit).calls.first
-      assert_equal "#{@exception.message}\n\n", error_puts_call.args[0]
-      assert_equal subject.help, help_puts_call.args[0]
-      assert_equal 1, exit_call.args[0]
+      assert_includes @exception.message, @kernel_spy.output
+      assert_includes subject.help, @kernel_spy.output
+      assert_equal 1, @kernel_spy.exit_status
     end
 
   end
 
   class OnInvalidConfigErrorTests < UnitTests
-    desc "on an invalid config error"
+    desc "when run raises an invalid config error"
     setup do
       @exception = Qs::Config::InvalidError.new("invalid config file")
       @cli.stubs(:run!).raises(@exception)
@@ -91,18 +79,15 @@ class Qs::CLI
     end
 
     should "print out the exception message, the help and exit with a 1" do
-      error_puts_call = @cli_spy.method(:puts).calls[0]
-      help_puts_call  = @cli_spy.method(:puts).calls[1]
-      exit_call = @cli_spy.method(:exit).calls.first
-      assert_equal "#{@exception.message}\n\n", error_puts_call.args[0]
-      assert_equal subject.help, help_puts_call.args[0]
-      assert_equal 1, exit_call.args[0]
+      assert_includes @exception.message, @kernel_spy.output
+      assert_includes subject.help, @kernel_spy.output
+      assert_equal 1, @kernel_spy.exit_status
     end
 
   end
 
     class OnInvalidProcessErrorTests < UnitTests
-    desc "on an invalid process error"
+    desc "when run raises an invalid process error"
     setup do
       @exception = Qs::Process::InvalidError.new("invalid command")
       @cli.stubs(:run!).raises(@exception)
@@ -110,18 +95,15 @@ class Qs::CLI
     end
 
     should "print out the exception message, the help and exit with a 1" do
-      error_puts_call = @cli_spy.method(:puts).calls[0]
-      help_puts_call  = @cli_spy.method(:puts).calls[1]
-      exit_call = @cli_spy.method(:exit).calls.first
-      assert_equal "#{@exception.message}\n\n", error_puts_call.args[0]
-      assert_equal subject.help, help_puts_call.args[0]
-      assert_equal 1, exit_call.args[0]
+      assert_includes @exception.message, @kernel_spy.output
+      assert_includes subject.help, @kernel_spy.output
+      assert_equal 1, @kernel_spy.exit_status
     end
 
   end
 
   class AllOtherExceptionsTests < UnitTests
-    desc "when other uncaught exceptions occur"
+    desc "when run raises any other exception"
     setup do
       @current_debug = ENV['DEBUG']
       ENV['DEBUG'] = 'yes'
@@ -133,18 +115,32 @@ class Qs::CLI
       ENV['DEBUG'] = @current_debug
     end
 
-    should "print out the exception message, backtrace and exit with a 1" do
-      error_puts_call     = @cli_spy.method(:puts).calls[0]
-      backtrace_puts_call = @cli_spy.method(:puts).calls[1]
-      exit_call = @cli_spy.method(:exit).calls.first
 
+    should "print out the exception message, backtrace and exit with a 1" do
       expected = "#{@exception.class}: #{@exception.message}"
-      assert_equal expected, error_puts_call.args[0]
+      assert_includes expected, @kernel_spy.output
       expected = @exception.backtrace.join("\n")
-      assert_equal expected, backtrace_puts_call.args[0]
-      assert_equal 1, exit_call.args[0]
+      assert_includes expected, @kernel_spy.output
+      assert_equal 1, @kernel_spy.exit_status
     end
 
+  end
+
+  class KernelSpy
+    attr_reader :output, :exit_status
+
+    def initialize
+      @output = ""
+      @exit_status = nil
+    end
+
+    def puts(message)
+      @output << message
+    end
+
+    def exit(status)
+      @exit_status = status
+    end
   end
 
 end
