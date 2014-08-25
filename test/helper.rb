@@ -5,8 +5,8 @@
 $LOAD_PATH.unshift(File.expand_path("../..", __FILE__))
 
 require 'pry' # require pry for debugging (`binding.pry`)
-require 'assert-mocha' if defined?(Assert)
 
 require 'pathname'
-ROOT         = Pathname.new(File.expand_path('../..', __FILE__))
-SUPPORT_PATH = ROOT.join('test/support')
+ROOT_PATH = Pathname.new(File.expand_path('../..', __FILE__))
+
+require 'test/support/factory'
