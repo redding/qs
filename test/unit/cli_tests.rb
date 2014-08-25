@@ -1,9 +1,7 @@
 require 'assert'
 require 'qs/cli'
 
-require 'qs/daemon'
-require 'qs/process'
-require 'qs/version'
+require 'qs/tmp_daemon'
 
 class Qs::CLI
 
@@ -11,135 +9,176 @@ class Qs::CLI
     desc "Qs::CLI"
     setup do
       @kernel_spy = KernelSpy.new
+      @file_path = Factory.file_path
+
+      @daemon = TestDaemon.new
+
+      @config_file = FakeConfigFile.new(@daemon)
+      Assert.stub(Qs::ConfigFile, :new).with(@file_path){ @config_file }
+
       @cli = Qs::CLI.new(@kernel_spy)
     end
     subject{ @cli }
 
-    should have_imeths :run, :help
     should have_cmeths :run
+    should have_imeths :run
 
-    should "return a help message with #help" do
-      expected = "Usage: qs <config file> <command> <options> \n" \
-                 "Commands: run, start, stop, restart \n\n" \
-                 "        --version\n" \
-                 "        --help\n"
-      assert_equal expected, subject.help
+  end
+
+  class CommandTests < UnitTests
+    setup do
+      @process_spy = ProcessSpy.new
+      @process_signal_spy = ProcessSignalSpy.new
     end
 
   end
 
-  class RunHelpTests < UnitTests
-    desc "with the --help switch"
+  class DefaultsTests < CommandTests
+    desc "with no command or file path"
     setup do
-      @cli.run([ "--help" ])
-    end
+      file_path = 'config.qs'
+      Assert.stub(Qs::ConfigFile, :new).with(file_path){ @config_file }
+      Assert.stub(Qs::TmpProcess, :new).with(@daemon, :daemonize => false) do
+        @process_spy
+      end
 
-    should "print out the help output and exit with a 0" do
-      assert_equal subject.help, @kernel_spy.output
-      assert_equal 0, @kernel_spy.exit_status
-    end
-
-  end
-
-  class RunVersionTests < UnitTests
-    desc "with the --version switch"
-    setup do
-      @cli.run([ "--version" ])
-    end
-
-    should "print out the version and exit with a 0" do
-      assert_equal Qs::VERSION, @kernel_spy.output
-      assert_equal 0, @kernel_spy.exit_status
-    end
-
-  end
-
-  class OnCLIErrorTests < UnitTests
-    desc "when run raises a CLI error"
-    setup do
-      @exception = Qs::CLIRB::Error.new("something went wrong")
-      @cli.stubs(:run!).raises(@exception)
       @cli.run
     end
 
-    should "print out the exception message, the help and exit with a 1" do
-      assert_includes @exception.message, @kernel_spy.output
-      assert_includes subject.help, @kernel_spy.output
-      assert_equal 1, @kernel_spy.exit_status
+    should "have defaulted the command and file path" do
+      assert_true @process_spy.run_called
     end
 
   end
 
-  class OnInvalidConfigErrorTests < UnitTests
-    desc "when run raises an invalid config error"
+  class RunTests < CommandTests
+    desc "with the run command"
     setup do
-      @exception = Qs::Config::InvalidError.new("invalid config file")
-      @cli.stubs(:run!).raises(@exception)
-      @cli.run
+      Assert.stub(Qs::TmpProcess, :new).with(@daemon, :daemonize => false) do
+        @process_spy
+      end
+
+      @cli.run(@file_path, 'run')
     end
 
-    should "print out the exception message, the help and exit with a 1" do
-      assert_includes @exception.message, @kernel_spy.output
-      assert_includes subject.help, @kernel_spy.output
-      assert_equal 1, @kernel_spy.exit_status
+    should "have built and run a non-daemonized process" do
+      assert_true @process_spy.run_called
     end
 
   end
 
-    class OnInvalidProcessErrorTests < UnitTests
-    desc "when run raises an invalid process error"
+  class StartTests < CommandTests
+    desc "with the start command"
     setup do
-      @exception = Qs::Process::InvalidError.new("invalid command")
-      @cli.stubs(:run!).raises(@exception)
-      @cli.run
+      Assert.stub(Qs::TmpProcess, :new).with(@daemon, :daemonize => true) do
+        @process_spy
+      end
+
+      @cli.run(@file_path, 'start')
     end
 
-    should "print out the exception message, the help and exit with a 1" do
-      assert_includes @exception.message, @kernel_spy.output
-      assert_includes subject.help, @kernel_spy.output
-      assert_equal 1, @kernel_spy.exit_status
+    should "have built and run a daemonized process" do
+      assert_true @process_spy.run_called
     end
 
   end
 
-  class AllOtherExceptionsTests < UnitTests
-    desc "when run raises any other exception"
+  class StopTests < CommandTests
+    desc "with the stop command"
     setup do
-      @current_debug = ENV['DEBUG']
-      ENV['DEBUG'] = 'yes'
-      @exception = StandardError.new("something went wrong")
-      @cli.stubs(:run!).raises(@exception)
-      @cli.run
-    end
-    teardown do
-      ENV['DEBUG'] = @current_debug
+      Assert.stub(Qs::ProcessSignal, :new).with(@daemon, 'TERM') do
+        @process_signal_spy
+      end
+
+      @cli.run(@file_path, 'stop')
     end
 
+    should "have built and sent a TERM signal" do
+      assert_true @process_signal_spy.send_called
+    end
 
-    should "print out the exception message, backtrace and exit with a 1" do
-      expected = "#{@exception.class}: #{@exception.message}"
+  end
+
+  class RestartTests < CommandTests
+    desc "with the restart command"
+    setup do
+      Assert.stub(Qs::ProcessSignal, :new).with(@daemon, 'USR2') do
+        @process_signal_spy
+      end
+
+      @cli.run(@file_path, 'restart')
+    end
+
+    should "have built and sent a USR2 signal" do
+      assert_true @process_signal_spy.send_called
+    end
+
+  end
+
+  class InvalidCommandTests < UnitTests
+    desc "with an invalid command"
+    setup do
+      @command = Factory.string
+      @cli.run(@file_path, @command)
+    end
+
+    should "output the error with the help" do
+      expected = "#{@command.inspect} is not a valid command"
       assert_includes expected, @kernel_spy.output
-      expected = @exception.backtrace.join("\n")
-      assert_includes expected, @kernel_spy.output
-      assert_equal 1, @kernel_spy.exit_status
+      assert_includes "Usage: qs", @kernel_spy.output
     end
 
   end
 
   class KernelSpy
-    attr_reader :output, :exit_status
+    attr_reader :exit_status
 
     def initialize
-      @output = ""
+      @output = StringIO.new
       @exit_status = nil
     end
 
-    def puts(message)
-      @output << message
+    def output
+      @output.rewind
+      @output.read
     end
 
-    def exit(status)
-      @exit_status = status
+    def puts(message)
+      @output.puts(message)
+    end
+
+    def exit(code)
+      @exit_status = code
+    end
+  end
+
+  class TestDaemon
+    include Qs::TmpDaemon
+  end
+
+  FakeConfigFile = Struct.new(:daemon)
+
+  class ProcessSpy
+    attr_reader :run_called
+
+    def initialize
+      @run_called = false
+    end
+
+    def run
+      @run_called = true
+    end
+  end
+
+  class ProcessSignalSpy
+    attr_reader :send_called
+
+    def initialize
+      @send_called = false
+    end
+
+    def send
+      @send_called = true
     end
   end
 

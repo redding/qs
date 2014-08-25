@@ -1,12 +1,14 @@
-require 'qs/daemon'
-require 'qs/process'
+require 'qs'
+require 'qs/config_file'
+require 'qs/tmp_process'
+require 'qs/process_signal'
 require 'qs/version'
 
 module Qs
 
   class CLI
 
-    def self.run(*args)
+    def self.run(args)
       self.new.run(*args)
     end
 
@@ -16,107 +18,50 @@ module Qs
     end
 
     def run(*args)
-      run!(*args)
+      begin
+        run!(*args)
+      rescue CLIRB::HelpExit
+        @kernel.puts help
+      rescue CLIRB::VersionExit
+        @kernel.puts Qs::VERSION
+      rescue CLIRB::Error, Qs::ConfigFile::InvalidError => exception
+        @kernel.puts "#{exception.message}\n\n"
+        @kernel.puts help
+        @kernel.exit 1
+      rescue StandardError => exception
+        @kernel.puts "#{exception.class}: #{exception.message}"
+        @kernel.puts exception.backtrace.join("\n")
+        @kernel.exit 1
+      end
       @kernel.exit 0
-    rescue CLIRB::HelpExit
-      @kernel.puts help
-      @kernel.exit 0
-    rescue CLIRB::VersionExit
-      @kernel.puts Qs::VERSION
-      @kernel.exit 0
-    rescue Qs::Process::InvalidError, Qs::Config::InvalidError,
-           CLIRB::Error => exception
-      @kernel.puts "#{exception.message}\n\n"
-      @kernel.puts help
-      @kernel.exit 1
-    rescue Exception => exception
-      @kernel.puts "#{exception.class}: #{exception.message}"
-      @kernel.puts exception.backtrace.join("\n") if ENV['DEBUG']
-      @kernel.exit 1
-    end
-
-    def help
-      "Usage: qs <config file> <command> <options> \n" \
-      "Commands: run, start, stop, restart \n" \
-      "#{@cli}"
     end
 
     private
 
     def run!(*args)
-      @cli.parse!(*args)
-      command          = @cli.args.pop || 'run'
-      config_file_path = @cli.args.pop || 'config.qs'
-      daemon = Qs::Config.new(config_file_path).daemon
-      Qs::Process.call(command, daemon)
-    end
-
-  end
-
-  class Config
-
-    # The `Config` evaluates the file and creates a proc using it's contents.
-    # This is a trick borrowed from Rack. This is essentially converting a file
-    # into a proc and then instance eval'ing it. This has a couple benefits and
-    # produces a less confusing outcome:
-    # * The obvious benefit is the file is evaluated in the context of this
-    #   `Config`. This allows the file to call `run`, setting the Qs daemon to
-    #   be run.
-    # * The other benefit is that the file's contents behave like they were a
-    #   proc defined by the user. Instance eval'ing the file directly, makes any
-    #   constants defined in it namespaced by the instance of the config, which
-    #   is very confusing. Thus, the proc is created and eval'd in the
-    #   `TOPLEVEL_BINDING`, which defines the constants correctly.
-
-    attr_reader :daemon
-
-    def initialize(file_path)
-      @file_path = build_file_path(file_path)
-      @daemon    = nil
-      build_proc = eval("proc{ #{File.read(@file_path)} }", TOPLEVEL_BINDING, @file_path, 0)
-      self.instance_eval(&build_proc)
-      validate!
-    end
-
-    def run(daemon)
-      @daemon = daemon
-    end
-
-    def validate!
-      if !@daemon.kind_of?(Qs::Daemon)
-        raise NoDaemonError.new(@daemon, @file_path)
+      @cli.parse!(args)
+      config_file_path, command = @cli.args
+      config_file_path ||= 'config.qs'
+      command ||= 'run'
+      daemon = Qs::ConfigFile.new(config_file_path).daemon
+      case(command)
+      when 'run'
+        Qs::TmpProcess.new(daemon, :daemonize => false).run
+      when 'start'
+        Qs::TmpProcess.new(daemon, :daemonize => true).run
+      when 'stop'
+        Qs::ProcessSignal.new(daemon, 'TERM').send
+      when 'restart'
+        Qs::ProcessSignal.new(daemon, 'USR2').send
+      else
+        raise CLIRB::Error, "#{command.inspect} is not a valid command"
       end
     end
 
-    private
-
-    def build_file_path(path)
-      full_path = File.expand_path(path)
-      raise NoConfigFileError.new(full_path) unless File.exists?(full_path)
-      full_path
-    rescue NoConfigFileError
-      full_path_with_qs = "#{full_path}.qs"
-      raise unless File.exists?(full_path_with_qs)
-      full_path_with_qs
-    end
-
-    InvalidError = Class.new(StandardError)
-
-    class NoConfigFileError < InvalidError
-      def initialize(path)
-        super "A configuration file couldn't be found at: #{path.to_s.inspect}"
-      end
-    end
-
-    class NoDaemonError < InvalidError
-      def initialize(daemon, path)
-        prefix = "Configuration file #{path.to_s.inspect}"
-        if daemon
-          super "#{prefix} called `run` without a Qs::Daemon"
-        else
-          super "#{prefix} didn't call `run` with a Qs::Daemon"
-        end
-      end
+    def help
+      "Usage: qs [CONFIG_FILE] [COMMAND]\n\n" \
+      "Commands: run, start, stop, restart\n" \
+      "Options: #{@cli}"
     end
 
   end
