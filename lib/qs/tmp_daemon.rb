@@ -1,3 +1,5 @@
+require 'logger'
+
 module Qs
 
   module TmpDaemon
@@ -11,6 +13,14 @@ module Qs
 
     module InstanceMethods
 
+      def name
+        self.class.name
+      end
+
+      def logger
+        self.class.logger
+      end
+
       def pid_file
         self.class.pid_file
       end
@@ -18,6 +28,16 @@ module Qs
     end
 
     module ClassMethods
+
+      def name(value = nil)
+        @name = value unless value.nil?
+        @name
+      end
+
+      def logger(value = nil)
+        @logger = value unless value.nil?
+        @logger || ::Logger.new('/dev/null')
+      end
 
       def pid_file(value = nil)
         @pid_file = value unless value.nil?

@@ -38,7 +38,7 @@ class Qs::CLI
     setup do
       file_path = 'config.qs'
       Assert.stub(Qs::ConfigFile, :new).with(file_path){ @config_file }
-      Assert.stub(Qs::TmpProcess, :new).with(@daemon, :daemonize => false) do
+      Assert.stub(Qs::Process, :new).with(@daemon, :daemonize => false) do
         @process_spy
       end
 
@@ -54,7 +54,7 @@ class Qs::CLI
   class RunTests < CommandTests
     desc "with the run command"
     setup do
-      Assert.stub(Qs::TmpProcess, :new).with(@daemon, :daemonize => false) do
+      Assert.stub(Qs::Process, :new).with(@daemon, :daemonize => false) do
         @process_spy
       end
 
@@ -70,7 +70,7 @@ class Qs::CLI
   class StartTests < CommandTests
     desc "with the start command"
     setup do
-      Assert.stub(Qs::TmpProcess, :new).with(@daemon, :daemonize => true) do
+      Assert.stub(Qs::Process, :new).with(@daemon, :daemonize => true) do
         @process_spy
       end
 
