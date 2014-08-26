@@ -50,15 +50,15 @@ module Qs::Daemon
   class StartingAndStoppingTests < UnitTests
     setup do
       @worker_pool_spy = DatWorkerPool::WorkerPoolSpy.new
-      DatWorkerPool.stubs(:new).tap do |s|
-        s.with(@daemon_class.min_workers, @daemon_class.max_workers)
-        s.returns(@worker_pool_spy)
-      end
+      Assert.stub(DatWorkerPool, :new).with(
+        @daemon_class.min_workers,
+        @daemon_class.max_workers
+      ){ @worker_pool_spy }
     end
     teardown do
       @daemon.stop rescue false
-      DatWorkerPool.unstub(:new)
     end
+
   end
 
   class StartTests < StartingAndStoppingTests
@@ -99,10 +99,9 @@ module Qs::Daemon
     desc "when started with a worker available and work on the queue, it"
     setup do
       @worker_pool_spy.worker_available = true
-      @queue.stubs(:fetch_job).tap do |s|
-        s.with(@daemon_class.configuration.wait_timeout)
-        s.returns('test')
-      end
+      Assert.stub(@queue, :fetch_job).with(
+        @daemon_class.configuration.wait_timeout
+      ){ 'test' }
       @thread = @daemon.start
     end
 
@@ -117,7 +116,7 @@ module Qs::Daemon
     desc "when it's started but there are no workers available"
     setup do
       @worker_pool_spy.worker_available = false
-      @queue.stubs(:fetch_job).raises("shouldn't be called")
+      Assert.stub(@queue, :fetch_job){ raise "shouldn't be called" }
       @thread = @daemon.start
     end
 
@@ -132,7 +131,7 @@ module Qs::Daemon
     desc "when it's started but the worker pool's queue isn't empty"
     setup do
       @worker_pool_spy.add_work 'job'
-      @queue.stubs(:fetch_job).raises("shouldn't be called")
+      Assert.stub(@queue, :fetch_job){ raise "shouldn't be called" }
       @thread = @daemon.start
     end
 
@@ -189,10 +188,7 @@ module Qs::Daemon
   class ValidateConfigurationTests < UnitTests
     desc "with an invalid config"
     setup do
-      @daemon_class.configuration.stubs(:validate!).raises(StandardError)
-    end
-    teardown do
-      @daemon_class.configuration.unstub(:validate!)
+      Assert.stub(@daemon_class.configuration, :validate!){ raise StandardError }
     end
 
     should "validate the configuration when initialized" do
