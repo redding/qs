@@ -1,275 +1,319 @@
 require 'assert'
 require 'qs/process'
 
-require 'qs/daemon'
-require 'qs/queue'
-require 'logger'
-require 'thread'
-require 'test/support/spy'
+require 'qs/tmp_daemon'
+require 'test/support/pid_file_spy'
 
 class Qs::Process
 
   class UnitTests < Assert::Context
     desc "Qs::Process"
     setup do
-      @daemon = ProcessTestsDaemon.new
-      @process = Qs::Process.new(@daemon)
+      @process_class = Qs::Process
+    end
+    subject{ @process_class }
+
+  end
+
+  class InitTests < UnitTests
+    desc "when init"
+    setup do
+      @current_env_process_name = ENV['QS_PROCESS_NAME']
+      @current_env_skip_daemonize = ENV['QS_SKIP_DAEMONIZE']
+      ENV.delete('QS_PROCESS_NAME')
+      ENV.delete('QS_SKIP_DAEMONIZE')
+
+      @daemon_spy = DaemonSpy.new
+
+      @pid_file_spy = PIDFileSpy.new(Factory.integer)
+      Assert.stub(Qs::PIDFile, :new).with(@daemon_spy.pid_file) do
+        @pid_file_spy
+      end
+
+      @restart_cmd_spy = RestartCmdSpy.new
+      Assert.stub(Qs::RestartCmd, :new){ @restart_cmd_spy }
+
+      @process = @process_class.new(@daemon_spy)
+    end
+    teardown do
+      ENV['QS_SKIP_DAEMONIZE'] = @current_env_skip_daemonize
+      ENV['QS_PROCESS_NAME'] = @current_env_process_name
     end
     subject{ @process }
 
-    should have_imeths :call
-    should have_cmeths :call
+    should have_readers :daemon, :name, :pid_file, :restart_cmd
+    should have_imeths :run, :daemonize?, :restart?
 
-    should "raise an unknown command error when " \
-           "passing an unexpected command string to #call" do
-      exception = nil
-      begin; @process.call('invalid'); rescue Exception => exception; end
-      assert_instance_of Qs::Process::InvalidError, exception
-      assert_equal "Unknown command: \"invalid\"", exception.message
+    should "know its daemon" do
+      assert_equal @daemon_spy, subject.daemon
+    end
+
+    should "know its name, pid file and restart cmd" do
+      assert_equal "qs-#{@daemon_spy.name}", subject.name
+      assert_equal @pid_file_spy, subject.pid_file
+      assert_equal @restart_cmd_spy, subject.restart_cmd
+    end
+
+    should "set its name using env vars" do
+      ENV['QS_PROCESS_NAME'] = Factory.string
+      process = @process_class.new(@daemon_spy)
+      assert_equal ENV['QS_PROCESS_NAME'], process.name
+    end
+
+    should "ignore blank env values for its name" do
+      ENV['QS_PROCESS_NAME'] = ''
+      process = @process_class.new(@daemon_spy)
+      assert_equal "qs-#{@daemon_spy.name}", process.name
+    end
+
+    should "not daemonize by default" do
+      process = @process_class.new(@daemon_spy)
+      assert_false process.daemonize?
+    end
+
+    should "daemonize if turned on" do
+      process = @process_class.new(@daemon_spy, :daemonize => true)
+      assert_true process.daemonize?
+    end
+
+    should "not daemonize if skipped via the env var" do
+      ENV['QS_SKIP_DAEMONIZE'] = 'yes'
+      process = @process_class.new(@daemon_spy)
+      assert_false process.daemonize?
+      process = @process_class.new(@daemon_spy, :daemonize => true)
+      assert_false process.daemonize?
+    end
+
+    should "ignore blank env values for skip daemonize" do
+      ENV['QS_SKIP_DAEMONIZE'] = ''
+      process = @process_class.new(@daemon_spy, :daemonize => true)
+      assert_true process.daemonize?
+    end
+
+    should "not restart by default" do
+      assert_false subject.restart?
     end
 
   end
 
-  class RunningADaemonTests < UnitTests
+  class RunSetupTests < InitTests
     setup do
-      @signal_spy  = Spy.new(::Signal).tap{ |s| s.track(:trap) }
-      @dir_spy     = Spy.new(::Dir).tap{ |s| s.track(:chdir) }
-      @kernel_spy  = Spy.new(::Kernel).tap{ |s| s.track(:exec) }
-      @handler_spy = Spy.new(Qs::Process::DaemonHandler).tap do |s|
-        s.track_on_instance(:daemonize!)
-      end
-      @current_qs_skip_daemonize = ENV['QS_SKIP_DAEMONIZE']
+      @daemonize_called = false
+      Assert.stub(::Process, :daemon).with(true){ @daemonize_called = true }
+
       @current_process_name = $0
+
+      @term_signal_trap_block = nil
+      @term_signal_trap_called = false
+      Assert.stub(::Signal, :trap).with("TERM") do |&block|
+        @term_signal_trap_block = block
+        @term_signal_trap_called = true
+      end
+
+      @int_signal_trap_block = nil
+      @int_signal_trap_called = false
+      Assert.stub(::Signal, :trap).with("INT") do |&block|
+        @int_signal_trap_block = block
+        @int_signal_trap_called = true
+      end
+
+      @usr2_signal_trap_block = nil
+      @usr2_signal_trap_called = false
+      Assert.stub(::Signal, :trap).with("USR2") do |&block|
+        @usr2_signal_trap_block = block
+        @usr2_signal_trap_called = true
+      end
     end
     teardown do
       $0 = @current_process_name
-      ENV['QS_SKIP_DAEMONIZE'] = @current_qs_skip_daemonize
-      @handler_spy.ignore_on_instance(:daemonize!)
-      @kernel_spy.ignore(:exec)
-      @dir_spy.ignore(:chdir)
-      @signal_spy.ignore(:trap)
-    end
-
-    private
-
-    def call_in_thread(command)
-      @process_thread = Thread.new do
-        begin
-          @process.call(command)
-        rescue Exception => exception
-          if ENV['DEBUG']
-            puts exception.inspect
-            puts exception.backtrace.join("\n")
-          end
-        end
-      end
-      @process_thread.abort_on_exception = false
-      @process_thread.join(0.1)
-      @process_thread
-    end
-
-    def shutdown_thread
-      @daemon.stop(true)
-      @process_thread.join if @process_thread
-      @process_thread = nil
     end
 
   end
 
-  class CallRunTests < RunningADaemonTests
-    desc "calling the 'run' command"
+  class RunTests < RunSetupTests
+    desc "and run"
     setup do
-      call_in_thread('run')
-    end
-    teardown do
-      shutdown_thread
+      @process.run
     end
 
-    should "set the process name" do
-      assert_equal "qs_test__main", $0
+    should "not have daemonized the process" do
+      assert_false @daemonize_called
+    end
+
+    should "have set the process name" do
+      assert_equal $0, subject.name
     end
 
     should "have written the PID file" do
-      assert File.exists?(@daemon.pid_file)
+      assert_true @pid_file_spy.write_called
     end
 
-    should "remove the PID file when it exits" do
-      @daemon.stop(true)
-      @process_thread.join
-      assert_not File.exists?(@daemon.pid_file)
+    should "have trapped signals" do
+      assert_true @term_signal_trap_called
+      assert_false @daemon_spy.stop_called
+      @term_signal_trap_block.call
+      assert_true @daemon_spy.stop_called
+
+      assert_true @int_signal_trap_called
+      assert_false @daemon_spy.halt_called
+      @int_signal_trap_block.call
+      assert_true @daemon_spy.halt_called
+
+      @daemon_spy.stop_called = false
+
+      assert_true @usr2_signal_trap_called
+      assert_false subject.restart?
+      @usr2_signal_trap_block.call
+      assert_true @daemon_spy.stop_called
+      assert_true subject.restart?
     end
 
-    should "remove the PID file even when an exception occurs" do
-      @process_thread.raise("something went wrong")
-      @process_thread.join
-      assert_not File.exists?(@daemon.pid_file)
+    should "have started the daemon" do
+      assert_true @daemon_spy.start_called
     end
 
-    should "run the daemon without daemonizing the process" do
-      assert @daemon.running?
-      assert_empty @handler_spy.instance_method(:daemonize!).calls
+    should "have joined the daemon thread" do
+      assert_true @daemon_spy.thread.join_called
     end
 
-    should "trap the TERM signal and stop the daemon when triggered" do
-      trap_call = @signal_spy.method(:trap).calls[0]
-      assert_equal "TERM", trap_call.args[0]
-
-      trap_call.block.call
-      @process_thread.join
-      assert_not @daemon.running?
+    should "not have exec'd the restart cmd" do
+      assert_false @restart_cmd_spy.exec_called
     end
 
-    should "trap the INT signal and halt the daemon when triggered" do
-      trap_call = @signal_spy.method(:trap).calls[1]
-      assert_equal "INT", trap_call.args[0]
-
-      trap_call.block.call
-      @process_thread.join
-      assert_not @daemon.running?
+    should "have removed the PID file" do
+      assert_true @pid_file_spy.remove_called
     end
 
-    should "trap the USR2 signal and restart the process when triggered" do
-      trap_call = @signal_spy.method(:trap).calls[2]
-      assert_equal "USR2", trap_call.args[0]
+  end
 
-      trap_call.block.call
-      @process_thread.join
-      assert_not @daemon.running?
+  class RunWithDaemonizeTests < RunSetupTests
+    desc "that should daemonize is run"
+    setup do
+      Assert.stub(@process, :daemonize?){ true }
+      @process.run
+    end
 
-      # should have restarted the current process
-      chdir_call = @dir_spy.method(:chdir).calls[0]
-      exec_call  = @kernel_spy.method(:exec).calls[0]
+    should "have daemonized the process" do
+      assert_true @daemonize_called
+    end
+
+  end
+
+  class RunAndDaemonPausedTests < RunSetupTests
+    desc "then run and sent a restart signal"
+    setup do
+      # mimicing pause being called by a signal, after the thread is joined
+      @daemon_spy.thread.on_join{ @usr2_signal_trap_block.call }
+      @process.run
+    end
+
+    should "have set env vars for execing the restart cmd" do
       assert_equal 'yes', ENV['QS_SKIP_DAEMONIZE']
-      assert_equal ENV['PWD'], chdir_call.args[0]
-      expected = [ Gem.ruby, @current_process_name, ARGV.dup ].flatten
-      assert expected, exec_call.args[0]
+    end
+
+    should "have exec'd the restart cmd" do
+      assert_true @restart_cmd_spy.exec_called
     end
 
   end
 
-  class CallStartTests < RunningADaemonTests
-    desc "calling the 'start' command"
+  class RestartCmdTests < UnitTests
+    desc "RestartCmd"
     setup do
-      call_in_thread('start')
+      @restart_cmd = Qs::RestartCmd.new
+
+      @chdir_called = false
+      Assert.stub(Dir, :chdir).with(@restart_cmd.dir){ @chdir_called = true }
+
+      @exec_called = false
+      Assert.stub(Kernel, :exec).with(*@restart_cmd.argv){ @exec_called = true }
     end
-    teardown do
-      shutdown_thread
+    subject{ @restart_cmd }
+
+    should have_readers :argv, :dir
+
+    should "know its argv and dir" do
+      expected = [ Gem.ruby, $0, ARGV ].flatten
+      assert_equal expected, subject.argv
+      assert_equal Dir.pwd, subject.dir
     end
 
-    should "daemonize the process and run the daemon" do
-      assert_not_empty @handler_spy.instance_method(:daemonize!).calls
-      assert @daemon.running?
+    should "change the dir when exec'd" do
+      subject.exec
+      assert_true @chdir_called
     end
 
-  end
-
-  class CallStartWithSkipDaemonizeTests < RunningADaemonTests
-    desc "calling the 'start' command with QS_SKIP_DAEMONIZE set"
-    setup do
-      ENV['QS_SKIP_DAEMONIZE'] = 'yes'
-      call_in_thread('start')
-    end
-    teardown do
-      shutdown_thread
-    end
-
-    should "run the daemon without daemonizing the process" do
-      assert @daemon.running?
-      assert_empty @handler_spy.instance_method(:daemonize!).calls
-    end
-
-  end
-
-  class RunThatCantWritePIDTests < RunningADaemonTests
-    desc "running the daemon when it can't write the PID file"
-    setup do
-      File.stubs(:open).raises("cant open file")
-    end
-    teardown do
-      File.unstub(:open)
-    end
-
-    should "raise an error about not being able to write the PID file" do
-      exception = nil
-      begin; @process.call('run'); rescue Exception => exception; end
-      assert_instance_of Qs::Process::InvalidError, exception
-      expected = "Can't write pid to file #{@daemon.pid_file.to_s.inspect}"
-      assert_equal expected, exception.message
+    should "kernel exec its argv when exec'd" do
+      subject.exec
+      assert_true @exec_called
     end
 
   end
 
-  class SendingASignalTests < UnitTests
-    setup do
-      File.open(@daemon.pid_file, 'w'){ |f| f.puts ::Process.pid }
-      @process_spy = Spy.new(::Process).tap{ |s| s.track(:kill) }
-    end
-    teardown do
-      FileUtils.rm_rf(@daemon.pid_file)
-    end
-  end
+  class DaemonSpy
+    include Qs::TmpDaemon
 
-  class CallStopTests < SendingASignalTests
-    desc "calling the 'stop' command"
-    setup do
-      @process.call('stop')
-    end
+    name Factory.string
+    pid_file Factory.file_path
 
-    should "have sent a TERM signal to the daemon's PID" do
-      kill_call = @process_spy.method(:kill).calls.first
-      assert_equal "TERM",        kill_call.args[0]
-      assert_equal ::Process.pid, kill_call.args[1]
-    end
+    attr_accessor :start_called, :stop_called, :halt_called
+    attr_reader :start_args
+    attr_reader :thread
 
-  end
+    def initialize(*args)
+      super
+      @start_called = false
+      @stop_called = false
+      @halt_called = false
 
-  class CallRestartTests < SendingASignalTests
-    desc "calling the 'restart' command"
-    setup do
-      @process.call('restart')
+      @start_args = nil
+
+      @thread = ThreadSpy.new
     end
 
-    should "have sent a USR2 signal to the daemon's PID" do
-      kill_call = @process_spy.method(:kill).calls.first
-      assert_equal "USR2",        kill_call.args[0]
-      assert_equal ::Process.pid, kill_call.args[1]
+    def start(*args)
+      @start_args = args
+      @start_called = true
+      @thread
     end
 
-  end
-
-  class SendingASignalThatCantReadPIDTests < SendingASignalTests
-    desc "sending a signal when it can't read the PID file"
-    setup do
-      File.stubs(:read).raises("cant open file")
-    end
-    teardown do
-      File.unstub(:read)
+    def stop(*args)
+      @stop_called = true
     end
 
-    should "raise an error about not being able to read the PID" do
-      exception = nil
-      begin; @process.call('stop'); rescue Exception => exception; end
-      assert_instance_of Qs::Process::InvalidError, exception
-      expected = "A PID couldn't be read from #{@daemon.pid_file.to_s.inspect}"
-      assert_equal expected, exception.message
-    end
-
-  end
-
-  # TODO - this is not a finalized method for creating queues
-  ProcessTestsQueue = Qs::Queue.new.tap do |q|
-    q.name   = "test__main"
-    q.logger = Logger.new(File.open(ROOT.join("log/test.log"), 'w')).tap do |l|
-      l.level = Logger::DEBUG
+    def halt(*args)
+      @halt_called = true
     end
   end
 
-  class ProcessTestsDaemon
-    include Qs::Daemon
-    queue ProcessTestsQueue
-    pid_file ROOT.join("tmp/test.pid")
-    workers 1
-    wait_timeout 0.5
+  class ThreadSpy
+    attr_reader :join_called, :on_join_proc
+
+    def initialize
+      @join_called = false
+      @on_join_proc = proc{ }
+    end
+
+    def on_join(&block)
+      @on_join_proc = block
+    end
+
+    def join
+      @join_called = true
+      @on_join_proc.call
+    end
+  end
+
+  class RestartCmdSpy
+    attr_reader :exec_called
+
+    def initialize
+      @exec_called = false
+    end
+
+    def exec
+      @exec_called = true
+    end
   end
 
 end

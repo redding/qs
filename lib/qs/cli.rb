@@ -1,6 +1,6 @@
 require 'qs'
 require 'qs/config_file'
-require 'qs/tmp_process'
+require 'qs/process'
 require 'qs/process_signal'
 require 'qs/version'
 
@@ -46,9 +46,9 @@ module Qs
       daemon = Qs::ConfigFile.new(config_file_path).daemon
       case(command)
       when 'run'
-        Qs::TmpProcess.new(daemon, :daemonize => false).run
+        Qs::Process.new(daemon, :daemonize => false).run
       when 'start'
-        Qs::TmpProcess.new(daemon, :daemonize => true).run
+        Qs::Process.new(daemon, :daemonize => true).run
       when 'stop'
         Qs::ProcessSignal.new(daemon, 'TERM').send
       when 'restart'
