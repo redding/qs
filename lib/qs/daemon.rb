@@ -4,7 +4,7 @@ require 'ns-options/boolean'
 require 'thread'
 
 require 'qs/queue'
-require 'qs/worker'
+# require 'qs/worker'
 
 module Qs
 

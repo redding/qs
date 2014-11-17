@@ -43,13 +43,13 @@ class Qs::Job
     should have_readers :name, :params, :created_at
     should have_imeths :to_payload
 
-    should "know its name, params and added at" do
+    should "know its name, params and created at" do
       assert_equal @name,     subject.name
       assert_equal @params,   subject.params
       assert_equal @created_at, subject.created_at
     end
 
-    should "default its added at" do
+    should "default its created at" do
       job = @job_class.new(@name, @params)
       assert_equal @current_time, job.created_at
     end

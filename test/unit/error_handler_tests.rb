@@ -32,7 +32,7 @@ class Qs::ErrorHandler
       @daemon_data = Qs::DaemonData.new({
         :error_procs => [first_error_proc, second_error_proc]
       })
-      @job = Qs::Job.new(Factory.string, { Factory.string => Factory.string })
+      @job = Qs::Job.new(Factory.string, Factory.string => Factory.string)
       @handler = @handler_class.new(@exception, @daemon_data, @job)
     end
     subject{ @handler }
