@@ -1,3 +1,5 @@
+require 'qs/qs_runner'
+
 module Qs
 
   class Route
@@ -14,8 +16,12 @@ module Qs
       @handler_class = constantize_handler_class(@handler_class_name)
     end
 
-    def run
-      # TODO
+    def run(job, daemon_data)
+      QsRunner.new(self.handler_class, {
+        :job    => job,
+        :params => job.params,
+        :logger => daemon_data.logger
+      }).run
     end
 
     private
