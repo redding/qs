@@ -1,97 +1,128 @@
 require 'assert'
 require 'qs/error_handler'
 
-require 'qs/queue'
+require 'qs/daemon_data'
+require 'qs/job'
 
 class Qs::ErrorHandler
 
   class UnitTests < Assert::Context
     desc "Qs::ErrorHandler"
     setup do
-      @last_call = nil
-      error_proc = proc{ |e, q, j| @last_call = ProcCall.new(e, q, j) }
-      @queue = Qs::Queue.new
-      @error_handler = Qs::ErrorHandler.new(@queue, [ error_proc ])
+      @exception = Factory.exception
+      @handler_class = Qs::ErrorHandler
     end
-    subject{ @error_handler }
+    subject{ @handler_class }
 
+  end
+
+  class InitTests < UnitTests
+    desc "when init"
+    setup do
+      @call_count = 0
+      @first_called_at = nil
+      @second_called_at = nil
+      @args_passed_to_error_proc = nil
+      first_error_proc = proc do |*args|
+        @args_passed_to_error_proc = args
+        @first_called_at = (@call_count += 1)
+      end
+      second_error_proc = proc{ @second_called_at = (@call_count += 1) }
+
+      @daemon_data = Qs::DaemonData.new({
+        :error_procs => [first_error_proc, second_error_proc]
+      })
+      @job = Qs::Job.new(Factory.string, { Factory.string => Factory.string })
+      @handler = @handler_class.new(@exception, @daemon_data, @job)
+    end
+    subject{ @handler }
+
+    should have_readers :exception, :daemon_data, :job
     should have_imeths :run
 
-    should "return the exception that it 'handled'" do
-      exception = StandardError.new('test')
-      returned_exception = subject.run(exception)
-      assert_same exception, returned_exception
+    should "know its exception, daemon data and job" do
+      assert_equal @exception, subject.exception
+      assert_equal @daemon_data, subject.daemon_data
+      assert_equal @job, subject.job
     end
 
-    should "call the error proc passing the exception, queue and job" do
-      exception = StandardError.new('test')
-      job       = 'test'
-      subject.run(exception, job)
-      assert_not_nil @last_call
-      assert_equal exception, @last_call.exception
-      assert_equal @queue,    @last_call.queue
-      assert_equal job,       @last_call.job
+    should "know its error procs" do
+      assert_equal @daemon_data.error_procs.reverse, subject.error_procs
     end
 
   end
 
-  class MultipleErrorProcTests < UnitTests
-    desc "with multiple error procs"
+  class RunTests < InitTests
+    desc "and run"
     setup do
-      @calls = []
-      first_error_proc  = proc{ @calls << :first }
-      second_error_proc = proc{ @calls << :second }
-      @error_handler = Qs::ErrorHandler.new(@queue, [
-        first_error_proc,
-        second_error_proc
-      ])
-      @error_handler.run(StandardError.new)
+      @handler.run
     end
 
-    should "call each error proc in order" do
-      assert_equal [ :first, :second ], @calls
+    should "pass its exception, daemon data and job to the error procs" do
+      assert_not_nil @args_passed_to_error_proc
+      assert_includes @exception, @args_passed_to_error_proc
+      assert_includes @daemon_data, @args_passed_to_error_proc
+      assert_includes @job, @args_passed_to_error_proc
+    end
+
+    should "call each of its error procs" do
+      assert_equal 1, @second_called_at
+      assert_equal 2, @first_called_at
     end
 
   end
 
-  class WithFailingErrorProcTests < UnitTests
-    desc "when an error proc generates an exception"
+  class RunAndErrorProcThrowsExceptionTests < UnitTests
+    desc "run with an error proc that throws an exception"
     setup do
-      @proc_exception = StandardError.new('not expected')
-      first_error_proc  = proc{ raise(@proc_exception) }
-      second_error_proc = proc{ |e, q, j| @caught_exception = e }
-      @error_handler = Qs::ErrorHandler.new(@queue, [
-        first_error_proc,
-        second_error_proc
-      ])
-      @returned_exception = @error_handler.run(StandardError.new)
-    end
+      @proc_exception = Factory.exception
+      error_proc = proc{ raise @proc_exception }
+      @daemon_data = Qs::DaemonData.new(:error_procs => [error_proc])
 
-    should "call the next error procs with the new exception" do
-      assert_same @proc_exception, @caught_exception
+      @handler = @handler_class.new(@exception, @daemon_data).tap(&:run)
     end
+    subject{ @handler }
 
-    should "return the exception last occurred" do
-      assert_same @proc_exception, @returned_exception
+    should "set its exception to the exception thrown by the error proc" do
+      assert_equal @proc_exception, subject.exception
     end
 
   end
 
-  class WhenLastErrorProcFailsTests < UnitTests
-    desc "when the last error proc generates an exception"
+  class RunWithMultipleErrorProcsThatThrowExceptionsTests < UnitTests
+    desc "run with multiple error procs that throw an exception"
     setup do
-      @proc_exception = StandardError.new('not expected')
-      error_proc = proc{ |e, q, j| raise(@proc_exception) }
-      @error_handler = Qs::ErrorHandler.new(@queue, [ error_proc ])
-      @returned_exception = @error_handler.run(StandardError.new)
-    end
+      @first_caught_exception = nil
+      @second_caught_exception = nil
+      @third_caught_exception = nil
 
-    should "return the new exception" do
-      assert_same @returned_exception, @proc_exception
+      @third_proc_exception = Factory.exception
+      third_proc = proc do |exception, d, j|
+        @third_caught_exception = exception
+        raise @third_proc_exception
+      end
+
+      @second_proc_exception = Factory.exception
+      second_proc = proc do |exception, d, j|
+        @second_caught_exception = exception
+        raise @second_proc_exception
+      end
+
+      first_proc = proc{ |exception, d, j| @first_caught_exception = exception }
+
+      @daemon_data = Qs::DaemonData.new({
+        :error_procs => [first_proc, second_proc, third_proc]
+      })
+      @handler = @handler_class.new(@exception, @daemon_data).tap(&:run)
+    end
+    subject{ @handler }
+
+    should "call each proc, passing the previously raised exception to the next" do
+      assert_equal @exception, @third_caught_exception
+      assert_equal @third_proc_exception, @second_caught_exception
+      assert_equal @second_proc_exception, @first_caught_exception
     end
 
   end
-
-  ProcCall = Struct.new(:exception, :queue, :job)
 
 end
