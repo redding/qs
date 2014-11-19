@@ -1,6 +1,7 @@
 require 'assert'
 require 'qs/daemon'
 
+require 'dat-worker-pool/worker_pool_spy'
 require 'ns-options/assert_macros'
 require 'qs/queue'
 
@@ -105,6 +106,179 @@ module Qs::Daemon
 
   end
 
+  class InitSetupTests < UnitTests
+    setup do
+      @queue = Qs::Queue.new do
+        name(Factory.string)
+        job 'test', TestHandler.to_s
+      end
+      @daemon_class.name Factory.string
+      @daemon_class.pid_file Factory.file_path
+      @daemon_class.workers Factory.integer
+      @daemon_class.verbose_logging Factory.boolean
+      @daemon_class.shutdown_timeout Factory.integer
+      @daemon_class.error{ Factory.string }
+      @daemon_class.queue @queue
+
+      @worker_pool_spy = DatWorkerPool::WorkerPoolSpy.new
+      Assert.stub(::DatWorkerPool, :new).with(
+        @daemon_class.min_workers,
+        @daemon_class.max_workers
+      ){ @worker_pool_spy }
+    end
+    teardown do
+      @daemon.stop(true) rescue false
+    end
+
+  end
+
+  class InitTests < InitSetupTests
+    desc "when init"
+    setup do
+      @daemon = @daemon_class.new
+    end
+    subject{ @daemon }
+
+    should "validate its configuration" do
+      assert_true @daemon_class.configuration.valid?
+    end
+
+    should "know its daemon data" do
+      configuration = @daemon_class.configuration
+      data = subject.daemon_data
+
+      assert_instance_of Qs::DaemonData, data
+      assert_equal configuration.name,             data.name
+      assert_equal configuration.pid_file,         data.pid_file
+      assert_equal configuration.min_workers,      data.min_workers
+      assert_equal configuration.max_workers,      data.max_workers
+      assert_equal configuration.verbose_logging,  data.verbose_logging
+      assert_equal configuration.shutdown_timeout, data.shutdown_timeout
+      assert_equal configuration.error_procs,      data.error_procs
+      assert_equal [@queue.redis_key], data.queue_redis_keys
+      assert_equal configuration.routes, data.routes.values
+      assert_instance_of configuration.logger.class, data.logger
+    end
+
+    should "not be running by default" do
+      assert_false subject.running?
+    end
+
+  end
+
+  class StartTests < InitTests
+    desc "and started"
+    setup do
+      @thread = @daemon.start
+    end
+
+    should "return the thread that is running the daemon" do
+      assert_instance_of Thread, @thread
+      assert_true @thread.alive?
+    end
+
+    should "be running" do
+      assert_true subject.running?
+    end
+
+  end
+
+  class StopTests < StartTests
+    desc "and then stopped"
+    setup do
+      Assert.stub(SystemTimer, :timeout_after).with(
+        @daemon_class.shutdown_timeout
+      ){ |&block| block.call }
+
+      @daemon.stop true
+    end
+
+    should "shutdown the worker pool" do
+      assert_true @worker_pool_spy.shutdown_called
+      assert_equal @daemon_class.shutdown_timeout, @worker_pool_spy.shutdown_timeout
+    end
+
+    should "stop the work loop thread" do
+      assert_false @thread.alive?
+    end
+
+    should "not be running" do
+      assert_equal false, subject.running?
+    end
+
+  end
+
+  class StoppedWithWorkAndNoShutdownTimeoutTests < InitSetupTests
+    desc "and stopped without a shutdown timeout and work on the pool"
+    setup do
+      @daemon_class.shutdown_timeout nil
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+      @worker_pool_spy.add_work(Factory.string)
+      @daemon.stop
+    end
+    teardown do
+      @daemon.halt true
+    end
+
+    should "shutdown the worker pool once the work has been processed" do
+      assert_false @worker_pool_spy.shutdown_called
+      @worker_pool_spy.work_items.pop
+      @thread.join
+      assert_true @worker_pool_spy.shutdown_called
+      assert_nil @worker_pool_spy.shutdown_timeout
+    end
+
+  end
+
+  class StoppedWithWorkAndShutdownTimeoutTests < InitSetupTests
+    desc "and stopped with a shutdown timeout and work on the pool"
+    setup do
+      @daemon_class.shutdown_timeout 0.5
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+      @worker_pool_spy.add_work(Factory.string)
+      @daemon.stop
+    end
+    teardown do
+      @daemon.halt true
+    end
+
+    should "shutdown the worker pool once the work has been processed" do
+      @worker_pool_spy.work_items.pop
+      @thread.join
+      assert_true @worker_pool_spy.shutdown_called
+      assert_equal @daemon_class.shutdown_timeout, @worker_pool_spy.shutdown_timeout
+    end
+
+    should "force shutdown the worker pool if the work is never processed" do
+      @thread.join
+      assert_true @worker_pool_spy.shutdown_called
+      assert_equal 0, @worker_pool_spy.shutdown_timeout
+    end
+
+  end
+
+  class HaltTests < StartTests
+    desc "and then halted"
+    setup do
+      @daemon.halt true
+    end
+
+    should "not shutdown the worker pool" do
+      assert_false @worker_pool_spy.shutdown_called
+    end
+
+    should "stop the work loop thread" do
+      assert_false @thread.alive?
+    end
+
+    should "not be running" do
+      assert_equal false, subject.running?
+    end
+
+  end
+
   class ConfigurationTests < UnitTests
     include NsOptions::AssertMacros
 
@@ -205,6 +379,38 @@ module Qs::Daemon
       assert_equal 1, called
       subject.validate!
       assert_equal 1, called
+    end
+
+  end
+
+  class SignalTests < UnitTests
+    desc "Signal"
+    setup do
+      @signal = Signal.new(:stop)
+    end
+    subject{ @signal }
+
+    should have_imeths :set, :start?, :stop?, :halt?
+
+    should "allow setting it to start" do
+      subject.set :start
+      assert_true subject.start?
+      assert_false subject.stop?
+      assert_false subject.halt?
+    end
+
+    should "allow setting it to stop" do
+      subject.set :stop
+      assert_false subject.start?
+      assert_true subject.stop?
+      assert_false subject.halt?
+    end
+
+    should "allow setting it to halt" do
+      subject.set :halt
+      assert_false subject.start?
+      assert_false subject.stop?
+      assert_true subject.halt?
     end
 
   end
