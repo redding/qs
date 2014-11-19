@@ -6,6 +6,70 @@ module Qs
 
   module Daemon
 
+    def self.included(klass)
+      klass.class_eval do
+        extend ClassMethods
+        include InstanceMethods
+      end
+    end
+
+    module InstanceMethods
+
+    end
+
+    module ClassMethods
+
+      def configuration
+        @configuration ||= Configuration.new
+      end
+
+      def name(*args)
+        self.configuration.name(*args)
+      end
+
+      def pid_file(*args)
+        self.configuration.pid_file(*args)
+      end
+
+      def min_workers(*args)
+        self.configuration.min_workers(*args)
+      end
+
+      def max_workers(*args)
+        self.configuration.max_workers(*args)
+      end
+
+      def workers(*args)
+        self.min_workers(*args)
+        self.max_workers(*args)
+      end
+
+      def verbose_logging(*args)
+        self.configuration.verbose_logging(*args)
+      end
+
+      def logger(*args)
+        self.configuration.logger(*args)
+      end
+
+      def shutdown_timeout(*args)
+        self.configuration.shutdown_timeout(*args)
+      end
+
+      def init(&block)
+        self.configuration.init_procs << block
+      end
+
+      def error(&block)
+        self.configuration.error_procs << block
+      end
+
+      def queue(queue)
+        self.configuration.queues << queue
+      end
+
+    end
+
     class Configuration
       include NsOptions::Proxy
 

@@ -13,6 +13,96 @@ module Qs::Daemon
     end
     subject{ @daemon_class }
 
+    should have_imeths :configuration
+    should have_imeths :name, :pid_file
+    should have_imeths :min_workers, :max_workers, :workers
+    should have_imeths :verbose_logging, :logger
+    should have_imeths :shutdown_timeout
+    should have_imeths :init, :error, :queue
+
+    should "know its configuration" do
+      config = subject.configuration
+      assert_instance_of Configuration, config
+      assert_same config, subject.configuration
+    end
+
+    should "allow reading/writing its configuration name" do
+      new_name = Factory.string
+      subject.name(new_name)
+      assert_equal new_name, subject.configuration.name
+      assert_equal new_name, subject.name
+    end
+
+    should "allow reading/writing its configuration pid file" do
+      new_pid_file = Factory.string
+      subject.pid_file(new_pid_file)
+      expected = Pathname.new(new_pid_file)
+      assert_equal expected, subject.configuration.pid_file
+      assert_equal expected, subject.pid_file
+    end
+
+    should "allow reading/writing its configuration min workers" do
+      new_min_workers = Factory.integer
+      subject.min_workers(new_min_workers)
+      assert_equal new_min_workers, subject.configuration.min_workers
+      assert_equal new_min_workers, subject.min_workers
+    end
+
+    should "allow reading/writing its configuration max workers" do
+      new_max_workers = Factory.integer
+      subject.max_workers(new_max_workers)
+      assert_equal new_max_workers, subject.configuration.max_workers
+      assert_equal new_max_workers, subject.max_workers
+    end
+
+    should "allow reading/writing its configuration workers" do
+      new_workers = Factory.integer
+      subject.workers(new_workers)
+      assert_equal new_workers, subject.configuration.min_workers
+      assert_equal new_workers, subject.configuration.max_workers
+      assert_equal new_workers, subject.min_workers
+      assert_equal new_workers, subject.max_workers
+    end
+
+    should "allow reading/writing its configuration verbose logging" do
+      new_verbose = Factory.boolean
+      subject.verbose_logging(new_verbose)
+      assert_equal new_verbose, subject.configuration.verbose_logging
+      assert_equal new_verbose, subject.verbose_logging
+    end
+
+    should "allow reading/writing its configuration logger" do
+      new_logger = Factory.string
+      subject.logger(new_logger)
+      assert_equal new_logger, subject.configuration.logger
+      assert_equal new_logger, subject.logger
+    end
+
+    should "allow reading/writing its configuration shutdown timeout" do
+      new_shutdown_timeout = Factory.integer
+      subject.shutdown_timeout(new_shutdown_timeout)
+      assert_equal new_shutdown_timeout, subject.configuration.shutdown_timeout
+      assert_equal new_shutdown_timeout, subject.shutdown_timeout
+    end
+
+    should "allow adding init procs to its configuration" do
+      new_init_proc = proc{ Factory.string }
+      subject.init(&new_init_proc)
+      assert_includes new_init_proc, subject.configuration.init_procs
+    end
+
+    should "allow adding error procs to its configuration" do
+      new_error_proc = proc{ Factory.string }
+      subject.error(&new_error_proc)
+      assert_includes new_error_proc, subject.configuration.error_procs
+    end
+
+    should "allow adding queues to its configuration" do
+      new_queue = Factory.string
+      subject.queue(new_queue)
+      assert_includes new_queue, subject.configuration.queues
+    end
+
   end
 
   class ConfigurationTests < UnitTests
