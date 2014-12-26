@@ -1,7 +1,10 @@
+require 'dat-worker-pool'
+require 'hella-redis'
 require 'ns-options'
 require 'pathname'
 require 'system_timer'
 require 'thread'
+require 'qs'
 require 'qs/daemon_data'
 require 'qs/logger'
 require 'qs/payload_handler'
@@ -22,15 +25,26 @@ module Qs
     module InstanceMethods
 
       attr_reader :daemon_data, :logger
+      attr_reader :signals_redis_key, :queue_redis_keys
 
       def initialize
         self.class.configuration.validate!
         @daemon_data = DaemonData.new(self.class.configuration.to_hash)
         @logger = @daemon_data.logger
 
+        @redis = HellaRedis::Connection.new(Qs.redis_config.merge({
+          :timeout => 1,
+          :size    => 2
+        }))
+        @queue_redis_keys = self.daemon_data.queue_redis_keys
+
         @work_loop_thread = nil
         @worker_pool      = nil
 
+        @signals_redis_key = "signals:#{@daemon_data.name}-" \
+                             "#{Socket.gethostname}-#{::Process.pid}"
+        @worker_available_reader, @worker_available_writer = IO.pipe
+        @queue_pop_reader, @queue_pop_writer = IO.pipe
         @signal = Signal.new(:stop)
       rescue InvalidError => exception
         exception.set_backtrace(caller)
@@ -49,27 +63,27 @@ module Qs
       def stop(wait = false)
         return unless self.running?
         @signal.set :stop
+        wakeup_work_loop_thread
         wait_for_shutdown if wait
       end
 
       def halt(wait = false)
         return unless self.running?
         @signal.set :halt
+        wakeup_work_loop_thread
         wait_for_shutdown if wait
       end
 
       private
 
       def process(serialized_payload)
-        # TODO
+        Qs::PayloadHandler.new(self.daemon_data, serialized_payload).run
       end
 
       def work_loop
         self.logger.debug "Starting work loop..."
-        @worker_pool = DatWorkerPool.new(
-          self.daemon_data.min_workers,
-          self.daemon_data.max_workers
-        ){ |serialized_payload| process(serialized_payload) }
+        setup_redis
+        @worker_pool = build_worker_pool
         process_inputs while @signal.start?
         self.logger.debug "Stopping work loop..."
         shutdown_worker_pool unless @signal.halt?
@@ -82,8 +96,38 @@ module Qs
         self.logger.debug "Stopped work loop"
       end
 
+      def setup_redis
+        # the 0 is the timeout for the `brpop` command, 0 means block indefinitely
+        @brpop_args = [self.signals_redis_key, self.queue_redis_keys, 0].flatten
+        # clear any signals that are already on the signals redis list
+        @redis.with{ |c| c.del(self.signals_redis_key) }
+      end
+
+      def build_worker_pool
+        wp = DatWorkerPool.new(
+          self.daemon_data.min_workers,
+          self.daemon_data.max_workers
+        ){ |serialized_payload| process(serialized_payload) }
+        wp.on_queue_pop{ @queue_pop_writer.write_nonblock('.') }
+        wp.on_worker_sleep{ @worker_available_writer.write_nonblock('.') }
+        wp.start
+        wp
+      end
+
       def process_inputs
-        sleep 1 # TODO
+        wait_for_available_worker
+        return unless @worker_pool.worker_available? && @signal.start?
+        redis_key, item = @redis.with{ |c| c.brpop(*@brpop_args) }
+        if redis_key != @signals_redis_key
+          @worker_pool.add_work(item)
+        end
+      end
+
+      def wait_for_available_worker
+        if !@worker_pool.worker_available? && @signal.start?
+          IO.select([@worker_available_reader])
+          @worker_available_reader.read_nonblock(1)
+        end
       end
 
       def shutdown_worker_pool
@@ -110,11 +154,20 @@ module Qs
       end
 
       def wait_for_worker_pool_to_empty
-        sleep(5) while !@worker_pool.queue_empty? && !@signal.halt?
+        while !@worker_pool.queue_empty? && !@signal.halt?
+          IO.select([@queue_pop_reader])
+          @queue_pop_reader.read_nonblock(1)
+        end
       end
 
       def wait_for_shutdown
         @work_loop_thread.join if @work_loop_thread
+      end
+
+      def wakeup_work_loop_thread
+        @redis.with{ |c| c.lpush(self.signals_redis_key, '.') }
+        @queue_pop_writer.write_nonblock('.')
+        @worker_available_writer.write_nonblock('.')
       end
 
     end
