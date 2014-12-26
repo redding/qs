@@ -22,6 +22,7 @@ Gem::Specification.new do |gem|
   gem.add_dependency("hella-redis",     ["~> 0.1"])
   gem.add_dependency("ns-options",      ["~> 1.1"])
   gem.add_dependency("oj",              ["~> 2.11"])
+  gem.add_dependency("SystemTimer",     ["~> 1.2"])
 
   gem.add_development_dependency("assert", ["~> 2.12"])
 end
