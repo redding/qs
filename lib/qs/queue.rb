@@ -19,7 +19,7 @@ module Qs
     end
 
     def redis_key
-      "queues:#{@name}"
+      @redis_key ||= "queues:#{name}"
     end
 
     def job_handler_ns(value = nil)
@@ -33,6 +33,10 @@ module Qs
       end
 
       @routes.push(Qs::Route.new(name, handler_name))
+    end
+
+    def add(job_name, params = nil)
+      Qs.enqueue(self, job_name, params)
     end
 
     def inspect
