@@ -1,6 +1,7 @@
 require 'assert'
 require 'qs'
 
+require 'hella-redis/connection_spy'
 require 'ns-options/assert_macros'
 
 module Qs
@@ -21,8 +22,8 @@ module Qs
     end
     subject{ @module }
 
-    should have_imeths :config, :configure
-    should have_imeths :init, :redis, :redis_config
+    should have_imeths :config, :configure, :init
+    should have_imeths :redis, :redis_config
 
     should "know its config" do
       assert_instance_of Config, subject.config
@@ -57,9 +58,22 @@ module Qs
       assert_equal expected, subject.config.redis.url
     end
 
-    should "set its redis connection when init" do
-      subject.init
-      assert_instance_of ConnectionPool, subject.redis
+  end
+
+  class InitTests < UnitTests
+    desc "when init"
+    setup do
+      @redis_spy = nil
+      Assert.stub(HellaRedis::Connection, :new) do |*args|
+        @redis_spy = HellaRedis::ConnectionSpy.new(*args)
+      end
+
+      @module.init
+    end
+
+    should "build a redis connection" do
+      assert_equal @redis_spy,        subject.redis
+      assert_equal @redis_spy.config, subject.redis_config
     end
 
   end

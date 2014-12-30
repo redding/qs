@@ -1,6 +1,6 @@
+require 'hella-redis'
 require 'ns-options'
 require 'qs/version'
-require 'qs/redis_connection'
 
 module Qs
 
@@ -15,7 +15,7 @@ module Qs
       self.config.redis.port,
       self.config.redis.db
     )
-    @redis = RedisConnection.new(self.redis_config)
+    @redis = HellaRedis::Connection.new(self.redis_config)
   end
 
   def self.redis
