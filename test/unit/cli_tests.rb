@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs/cli'
 
-require 'qs/tmp_daemon'
+require 'qs/daemon'
 
 class Qs::CLI
 
@@ -153,7 +153,10 @@ class Qs::CLI
   end
 
   class TestDaemon
-    include Qs::TmpDaemon
+    include Qs::Daemon
+
+    name Factory.string
+    queue Qs::Queue.new{ name Factory.string }
   end
 
   FakeConfigFile = Struct.new(:daemon)

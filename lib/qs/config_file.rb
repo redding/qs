@@ -1,4 +1,4 @@
-require 'qs/tmp_daemon'
+require 'qs/daemon'
 
 module Qs
 
@@ -20,7 +20,7 @@ module Qs
     private
 
     def validate!
-      if !@daemon.kind_of?(Qs::TmpDaemon)
+      if !@daemon.kind_of?(Qs::Daemon)
         raise NoDaemonError.new(@daemon, @file_path)
       end
     end

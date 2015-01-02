@@ -149,6 +149,9 @@ module Qs::Daemon
 
     should have_readers :daemon_data, :logger
     should have_readers :signals_redis_key, :queue_redis_keys
+    should have_imeths :name, :pid_file
+    should have_imeths :running?
+    should have_imeths :start, :stop, :halt
 
     should "validate its configuration" do
       assert_true @daemon_class.configuration.valid?
@@ -176,6 +179,12 @@ module Qs::Daemon
       expected = "signals:#{data.name}-#{Socket.gethostname}-#{::Process.pid}"
       assert_equal expected, subject.signals_redis_key
       assert_equal data.queue_redis_keys, subject.queue_redis_keys
+    end
+
+    should "know its name and pid file" do
+      data = subject.daemon_data
+      assert_equal data.name,     subject.name
+      assert_equal data.pid_file, subject.pid_file
     end
 
     should "build a redis connection" do
