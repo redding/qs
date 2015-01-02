@@ -43,8 +43,10 @@ module Qs
 
         @signals_redis_key = "signals:#{@daemon_data.name}-" \
                              "#{Socket.gethostname}-#{::Process.pid}"
-        @worker_available_reader, @worker_available_writer = IO.pipe
-        @queue_pop_reader, @queue_pop_writer = IO.pipe
+
+        @worker_available_io = IOPipe.new
+        @queue_pop_io        = IOPipe.new
+
         @signal = Signal.new(:stop)
       rescue InvalidError => exception
         exception.set_backtrace(caller)
@@ -90,7 +92,7 @@ module Qs
 
       def work_loop
         self.logger.debug "Starting work loop..."
-        setup_redis
+        setup_redis_and_ios
         @worker_pool = build_worker_pool
         process_inputs while @signal.start?
         self.logger.debug "Stopping work loop..."
@@ -100,15 +102,20 @@ module Qs
         self.logger.error "#{exception.class}: #{exception.message}"
         self.logger.error exception.backtrace.join("\n")
       ensure
+        @worker_available_io.teardown
+        @queue_pop_io.teardown
         @work_loop_thread = nil
         self.logger.debug "Stopped work loop"
       end
 
-      def setup_redis
+      def setup_redis_and_ios
         # the 0 is the timeout for the `brpop` command, 0 means block indefinitely
         @brpop_args = [self.signals_redis_key, self.queue_redis_keys, 0].flatten
         # clear any signals that are already on the signals redis list
         @redis.with{ |c| c.del(self.signals_redis_key) }
+
+        @worker_available_io.setup
+        @queue_pop_io.setup
       end
 
       def build_worker_pool
@@ -116,8 +123,8 @@ module Qs
           self.daemon_data.min_workers,
           self.daemon_data.max_workers
         ){ |serialized_payload| process(serialized_payload) }
-        wp.on_queue_pop{ @queue_pop_writer.write_nonblock('.') }
-        wp.on_worker_sleep{ @worker_available_writer.write_nonblock('.') }
+        wp.on_queue_pop{ @queue_pop_io.signal }
+        wp.on_worker_sleep{ @worker_available_io.signal }
         wp.start
         wp
       end
@@ -133,8 +140,7 @@ module Qs
 
       def wait_for_available_worker
         if !@worker_pool.worker_available? && @signal.start?
-          IO.select([@worker_available_reader])
-          @worker_available_reader.read_nonblock(1)
+          @worker_available_io.wait
         end
       end
 
@@ -163,8 +169,7 @@ module Qs
 
       def wait_for_worker_pool_to_empty
         while !@worker_pool.queue_empty? && !@signal.halt?
-          IO.select([@queue_pop_reader])
-          @queue_pop_reader.read_nonblock(1)
+          @queue_pop_io.wait
         end
       end
 
@@ -174,8 +179,8 @@ module Qs
 
       def wakeup_work_loop_thread
         @redis.with{ |c| c.lpush(self.signals_redis_key, '.') }
-        @queue_pop_writer.write_nonblock('.')
-        @worker_available_writer.write_nonblock('.')
+        @worker_available_io.signal
+        @queue_pop_io.signal
       end
 
     end
@@ -281,6 +286,38 @@ module Qs
         end
         self.routes.each(&:validate!)
         @valid = true
+      end
+    end
+
+    class IOPipe
+      NULL   = File.open('/dev/null', 'w')
+      SIGNAL = '.'.freeze
+
+      attr_reader :reader, :writer
+
+      def initialize
+        @reader = NULL
+        @writer = NULL
+      end
+
+      def wait
+        ::IO.select([@reader])
+        @reader.read_nonblock(SIGNAL.bytesize)
+      end
+
+      def signal
+        @writer.write_nonblock(SIGNAL)
+      end
+
+      def setup
+        @reader, @writer = ::IO.pipe
+      end
+
+      def teardown
+        @reader.close
+        @writer.close
+        @reader = NULL
+        @writer = NULL
       end
     end
 
