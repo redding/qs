@@ -3,6 +3,8 @@ require 'qs'
 
 require 'hella-redis/connection_spy'
 require 'ns-options/assert_macros'
+require 'qs/job'
+require 'qs/queue'
 
 module Qs
 
@@ -23,6 +25,7 @@ module Qs
     subject{ @module }
 
     should have_imeths :config, :configure, :init
+    should have_imeths :enqueue
     should have_imeths :redis, :redis_config
 
     should "know its config" do
@@ -63,17 +66,49 @@ module Qs
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @redis_spy = nil
+      @connection_spy = nil
       Assert.stub(HellaRedis::Connection, :new) do |*args|
-        @redis_spy = HellaRedis::ConnectionSpy.new(*args)
+        @connection_spy = HellaRedis::ConnectionSpy.new(*args)
       end
 
       @module.init
     end
 
     should "build a redis connection" do
-      assert_equal @redis_spy,        subject.redis
-      assert_equal @redis_spy.config, subject.redis_config
+      assert_equal @connection_spy,        subject.redis
+      assert_equal @connection_spy.config, subject.redis_config
+    end
+
+  end
+
+  class EnqueueTests < InitTests
+    desc "enqueue"
+    setup do
+      @queue = Qs::Queue.new{ name Factory.string }
+      @job = Qs::Job.new(Factory.string, Factory.string => Factory.string)
+    end
+
+    should "add jobs to the queue's redis list" do
+      subject.enqueue(@queue, @job.name, @job.params)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :lpush, call.command
+      assert_equal @queue.redis_key, call.args.first
+      assert_equal @job.to_payload, Qs::Payload.decode(call.args.last)
+    end
+
+    should "default the job's params to an empty hash" do
+      subject.enqueue(@queue, @job.name)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :lpush, call.command
+      exp = @job.to_payload.merge('params' => {})
+      assert_equal exp, Qs::Payload.decode(call.args.last)
+    end
+
+    should "return the job" do
+      result = subject.enqueue(@queue, @job.name, @job.params)
+      assert_equal @job, result
     end
 
   end

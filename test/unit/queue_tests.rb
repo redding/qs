@@ -16,6 +16,7 @@ class Qs::Queue
 
     should have_readers :routes
     should have_imeths :name, :redis_key, :job_handler_ns, :job
+    should have_imeths :add
 
     should "build an empty array for its routes by default" do
       assert_equal [], subject.routes
@@ -28,7 +29,9 @@ class Qs::Queue
     end
 
     should "know its redis key" do
-      assert_equal "queues:#{subject.name}", subject.redis_key
+      result = subject.redis_key
+      assert_equal "queues:#{subject.name}", result
+      assert_same result, subject.redis_key
     end
 
     should "not have a job handler ns by default" do
@@ -63,6 +66,24 @@ class Qs::Queue
       route = subject.routes.last
       expected = "#{namespace}::#{handler_name}"
       assert_equal expected, route.handler_class_name
+    end
+
+    should "add jobs to redis using `add`" do
+      enqueue_args = nil
+      Assert.stub(Qs, :enqueue){ |*args| enqueue_args = args }
+
+      job_name = Factory.string
+      job_params = { Factory.string => Factory.string }
+      subject.add(job_name, job_params)
+      exp = [subject, job_name, job_params]
+      assert_equal exp, enqueue_args
+    end
+
+    should "return what `enqueue` returns using `add`" do
+      fake_job = Factory.string
+      Assert.stub(Qs, :enqueue){ fake_job }
+      result = subject.add(Factory.string, {})
+      assert_equal fake_job, result
     end
 
     should "know its custom inspect" do
