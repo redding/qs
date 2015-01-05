@@ -2,6 +2,7 @@ require 'assert'
 require 'qs/daemon'
 
 require 'dat-worker-pool/worker_pool_spy'
+require 'hella-redis/connection_spy'
 require 'ns-options/assert_macros'
 require 'qs/queue'
 
@@ -120,14 +121,21 @@ module Qs::Daemon
       @daemon_class.error{ Factory.string }
       @daemon_class.queue @queue
 
-      @worker_pool_spy = DatWorkerPool::WorkerPoolSpy.new
-      Assert.stub(::DatWorkerPool, :new).with(
-        @daemon_class.min_workers,
-        @daemon_class.max_workers
-      ){ @worker_pool_spy }
+      @connection_spy = nil
+      Assert.stub(HellaRedis::Connection, :new) do |*args|
+        @connection_spy = ConnectionSpy.new(*args)
+      end
+
+      @worker_pool_spy = nil
+      @worker_available = true
+      Assert.stub(::DatWorkerPool, :new) do |*args, &block|
+        @worker_pool_spy = DatWorkerPool::WorkerPoolSpy.new(*args, &block)
+        @worker_pool_spy.worker_available = !!@worker_available
+        @worker_pool_spy
+      end
     end
     teardown do
-      @daemon.stop(true) rescue false
+      @daemon.halt(true) rescue false
     end
 
   end
@@ -138,6 +146,9 @@ module Qs::Daemon
       @daemon = @daemon_class.new
     end
     subject{ @daemon }
+
+    should have_readers :daemon_data, :logger
+    should have_readers :signals_redis_key, :queue_redis_keys
 
     should "validate its configuration" do
       assert_true @daemon_class.configuration.valid?
@@ -160,6 +171,22 @@ module Qs::Daemon
       assert_instance_of configuration.logger.class, data.logger
     end
 
+    should "know its signal and queues redis keys" do
+      data = subject.daemon_data
+      expected = "signals:#{data.name}-#{Socket.gethostname}-#{::Process.pid}"
+      assert_equal expected, subject.signals_redis_key
+      assert_equal data.queue_redis_keys, subject.queue_redis_keys
+    end
+
+    should "build a redis connection" do
+      assert_not_nil @connection_spy
+      exp = Qs.redis_config.merge({
+        :timeout => 1,
+        :size    => 2
+      })
+      assert_equal exp, @connection_spy.config
+    end
+
     should "not be running by default" do
       assert_false subject.running?
     end
@@ -179,6 +206,86 @@ module Qs::Daemon
 
     should "be running" do
       assert_true subject.running?
+    end
+
+    should "clear the signals list in redis" do
+      call = @connection_spy.redis_calls.first
+      assert_equal :del, call.command
+      assert_equal [subject.signals_redis_key], call.args
+    end
+
+    should "build and start a worker pool" do
+      assert_not_nil @worker_pool_spy
+      assert_equal @daemon_class.min_workers, @worker_pool_spy.min_workers
+      assert_equal @daemon_class.max_workers, @worker_pool_spy.max_workers
+      assert_equal 1, @worker_pool_spy.on_queue_pop_callbacks.size
+      assert_equal 1, @worker_pool_spy.on_worker_sleep_callbacks.size
+      assert_true @worker_pool_spy.start_called
+    end
+
+  end
+
+  class RunningWithoutAvailableWorkerTests < InitSetupTests
+    desc "running without an available worker"
+    setup do
+      @worker_available = false
+
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+    end
+    subject{ @daemon }
+
+    should "sleep its thread and not add work to its worker pool" do
+      @thread.join(0.1)
+      assert_equal 'sleep', @thread.status
+      @connection_spy.add_item_to_list(@queue.redis_key, Factory.string)
+      @thread.join(0.1)
+      assert_empty @worker_pool_spy.work_items
+    end
+
+  end
+
+  class RunningWithWorkerAndWorkTests < InitSetupTests
+    desc "running with a worker available and work"
+    setup do
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+    end
+    subject{ @daemon }
+
+    should "call brpop on its redis connection and add work to the worker pool" do
+      serialized_payload = Factory.string
+      @connection_spy.add_item_to_list(@queue.redis_key, serialized_payload)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :brpop, call.command
+      exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
+      assert_equal exp, call.args
+      assert_equal serialized_payload, @worker_pool_spy.work_items.first
+    end
+
+  end
+
+  class WorkerPoolWorkProcTests < InitSetupTests
+    desc "worker pool work proc"
+    setup do
+      @payload_handler_spy = nil
+      Assert.stub(Qs::PayloadHandler, :new) do |*args|
+        @payload_handler_spy = PayloadHandlerSpy.new(*args)
+      end
+
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+
+      @serialized_payload = Factory.string
+      @worker_pool_spy.work_proc.call(@serialized_payload)
+    end
+    subject{ @daemon }
+
+    should "build and run a payload handler" do
+      assert_not_nil @payload_handler_spy
+      assert_equal subject.daemon_data, @payload_handler_spy.daemon_data
+      assert_equal @serialized_payload, @payload_handler_spy.serialized_payload
     end
 
   end
@@ -223,7 +330,7 @@ module Qs::Daemon
 
     should "shutdown the worker pool once the work has been processed" do
       assert_false @worker_pool_spy.shutdown_called
-      @worker_pool_spy.work_items.pop
+      @worker_pool_spy.pop_work
       @thread.join
       assert_true @worker_pool_spy.shutdown_called
       assert_nil @worker_pool_spy.shutdown_timeout
@@ -259,6 +366,22 @@ module Qs::Daemon
 
   end
 
+  class StopWhileWaitingForWorkerTests < InitSetupTests
+    desc "stopped while waiting for a worker"
+    setup do
+      @worker_available = false
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+      @daemon.stop(true)
+    end
+    subject{ @daemon }
+
+    should "not be running" do
+      assert_equal false, subject.running?
+    end
+
+  end
+
   class HaltTests < StartTests
     desc "and then halted"
     setup do
@@ -272,6 +395,22 @@ module Qs::Daemon
     should "stop the work loop thread" do
       assert_false @thread.alive?
     end
+
+    should "not be running" do
+      assert_equal false, subject.running?
+    end
+
+  end
+
+  class HaltWhileWaitingForWorkerTests < InitSetupTests
+    desc "halted while waiting for a worker"
+    setup do
+      @worker_available = false
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+      @daemon.halt(true)
+    end
+    subject{ @daemon }
 
     should "not be running" do
       assert_equal false, subject.running?
@@ -416,5 +555,55 @@ module Qs::Daemon
   end
 
   TestHandler = Class.new
+
+  class PayloadHandlerSpy
+    attr_reader :daemon_data, :serialized_payload
+    attr_reader :run_called
+
+    def initialize(daemon_data, serialized_payload)
+      @daemon_data = daemon_data
+      @serialized_payload = serialized_payload
+      @run_called = false
+    end
+
+    def run
+      @run_called = true
+    end
+  end
+
+  class ConnectionSpy < HellaRedis::ConnectionSpy
+    def initialize(config)
+      super(config, RedisSpy.new(config))
+    end
+
+    def add_item_to_list(key, value)
+      self.redis_spy.lpush(key, value)
+    end
+  end
+
+  class RedisSpy < HellaRedis::RedisSpy
+    attr_reader :list
+
+    def initialize(config)
+      super(config)
+      @list = []
+      @mutex = Mutex.new
+      @condition_variable = ConditionVariable.new
+    end
+
+    def lpush(*args)
+      super(*args)
+      self.list.unshift(args)
+      @condition_variable.signal
+    end
+
+    def brpop(*args)
+      super(*args)
+      if self.list.empty?
+        @mutex.synchronize{ @condition_variable.wait(@mutex) }
+      end
+      self.list.pop
+    end
+  end
 
 end
