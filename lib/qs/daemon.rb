@@ -51,6 +51,14 @@ module Qs
         raise exception
       end
 
+      def name
+        @daemon_data.name
+      end
+
+      def pid_file
+        @daemon_data.pid_file
+      end
+
       def running?
         !!(@work_loop_thread && @work_loop_thread.alive?)
       end

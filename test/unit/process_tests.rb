@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs/process'
 
-require 'qs/tmp_daemon'
+require 'qs/daemon'
 require 'test/support/pid_file_spy'
 
 class Qs::Process
@@ -251,10 +251,12 @@ class Qs::Process
   end
 
   class DaemonSpy
-    include Qs::TmpDaemon
+    include Qs::Daemon
 
     name Factory.string
     pid_file Factory.file_path
+
+    queue Qs::Queue.new{ name Factory.string }
 
     attr_accessor :start_called, :stop_called, :halt_called
     attr_reader :start_args

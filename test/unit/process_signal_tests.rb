@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs/process_signal'
 
-require 'qs/tmp_daemon'
+require 'qs/daemon'
 require 'test/support/pid_file_spy'
 
 class Qs::ProcessSignal
@@ -49,9 +49,12 @@ class Qs::ProcessSignal
   end
 
   class TestDaemon
-    include Qs::TmpDaemon
+    include Qs::Daemon
 
+    name Factory.string
     pid_file Factory.file_path
+
+    queue Qs::Queue.new{ name Factory.string }
 
   end
 
