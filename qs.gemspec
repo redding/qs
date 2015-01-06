@@ -25,4 +25,5 @@ Gem::Specification.new do |gem|
   gem.add_dependency("SystemTimer",     ["~> 1.2"])
 
   gem.add_development_dependency("assert", ["~> 2.12"])
+  gem.add_development_dependency("scmd",   ["~> 2.3"])
 end
