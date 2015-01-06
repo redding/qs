@@ -2,6 +2,7 @@ require 'hella-redis'
 require 'ns-options'
 require 'qs/version'
 require 'qs/job'
+require 'qs/job_handler'
 require 'qs/payload'
 require 'qs/queue'
 
