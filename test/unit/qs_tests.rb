@@ -11,22 +11,17 @@ module Qs
   class UnitTests < Assert::Context
     desc "Qs"
     setup do
-      @current_config = Qs.config
-      @current_redis  = Qs.redis
-      Qs.instance_variable_set("@config", nil)
-      Qs.instance_variable_set("@redis", nil)
-
+      Qs.reset!
       @module = Qs
     end
     teardown do
-      Qs.instance_variable_set("@redis", @current_redis)
-      Qs.instance_variable_set("@config", @current_config)
+      Qs.reset!
+      Qs.init
     end
     subject{ @module }
 
-    should have_imeths :config, :configure, :init
-    should have_imeths :enqueue
-    should have_imeths :redis, :redis_config
+    should have_imeths :config, :configure, :init, :reset!
+    should have_imeths :enqueue, :client, :redis, :redis_config
 
     should "know its config" do
       assert_instance_of Config, subject.config
@@ -38,7 +33,8 @@ module Qs
       assert_equal subject.config, yielded
     end
 
-    should "not have a redis connection by default" do
+    should "not have a client or redis connection by default" do
+      assert_nil subject.client
       assert_nil subject.redis
     end
 
@@ -47,12 +43,24 @@ module Qs
       assert_equal expected, subject.redis_config
     end
 
-    should "set its configured redis url when init" do
-      subject.config.redis.ip   = Factory.string
-      subject.config.redis.port = Factory.integer
-      subject.config.redis.db   = Factory.integer
-      subject.init
+  end
 
+  class InitTests < UnitTests
+    desc "when init"
+    setup do
+      @module.config.redis.ip   = Factory.string
+      @module.config.redis.port = Factory.integer
+      @module.config.redis.db   = Factory.integer
+
+      @client_spy = nil
+      Assert.stub(Client, :new) do |*args|
+        @client_spy = ClientSpy.new(*args)
+      end
+
+      @module.init
+    end
+
+    should "set its configured redis url" do
       expected = RedisUrl.new(
         subject.config.redis.ip,
         subject.config.redis.port,
@@ -61,54 +69,24 @@ module Qs
       assert_equal expected, subject.config.redis.url
     end
 
-  end
-
-  class InitTests < UnitTests
-    desc "when init"
-    setup do
-      @connection_spy = nil
-      Assert.stub(HellaRedis::Connection, :new) do |*args|
-        @connection_spy = HellaRedis::ConnectionSpy.new(*args)
-      end
-
-      @module.init
+    should "build a client" do
+      assert_equal @client_spy,          subject.client
+      assert_equal @client_spy.redis,    subject.redis
+      assert_equal subject.redis_config, @client_spy.redis_config
     end
 
-    should "build a redis connection" do
-      assert_equal @connection_spy,        subject.redis
-      assert_equal @connection_spy.config, subject.redis_config
+    should "call enqueue on its client using `enqueue`" do
+      queue  = Qs::Queue.new{ name Factory.string }
+      args   = [queue, Factory.string, { Factory.string => Factory.string }]
+      result = subject.enqueue(*args)
+      assert_equal args, result
     end
 
-  end
-
-  class EnqueueTests < InitTests
-    desc "enqueue"
-    setup do
-      @queue = Qs::Queue.new{ name Factory.string }
-      @job = Qs::Job.new(Factory.string, Factory.string => Factory.string)
-    end
-
-    should "add jobs to the queue's redis list" do
-      subject.enqueue(@queue, @job.name, @job.params)
-
-      call = @connection_spy.redis_calls.last
-      assert_equal :lpush, call.command
-      assert_equal @queue.redis_key, call.args.first
-      assert_equal @job.to_payload, Qs::Payload.decode(call.args.last)
-    end
-
-    should "default the job's params to an empty hash" do
-      subject.enqueue(@queue, @job.name)
-
-      call = @connection_spy.redis_calls.last
-      assert_equal :lpush, call.command
-      exp = @job.to_payload.merge('params' => {})
-      assert_equal exp, Qs::Payload.decode(call.args.last)
-    end
-
-    should "return the job" do
-      result = subject.enqueue(@queue, @job.name, @job.params)
-      assert_equal @job, result
+    should "reset its config, client and redis connection using `reset!`" do
+      subject.reset!
+      assert_nil subject.config.redis.url
+      assert_nil subject.client
+      assert_nil subject.redis
     end
 
   end
@@ -126,13 +104,13 @@ module Qs
 
     should "know its redis options" do
       assert_equal 'localhost', subject.redis.ip
-      assert_equal 6379, subject.redis.port
-      assert_equal 0, subject.redis.db
+      assert_equal 6379,        subject.redis.port
+      assert_equal 0,           subject.redis.db
+      assert_equal 'qs',        subject.redis.redis_ns
+      assert_equal 'ruby',      subject.redis.driver
+      assert_equal 1,           subject.redis.timeout
+      assert_equal 4,           subject.redis.size
       assert_nil subject.redis.url
-      assert_equal 'qs', subject.redis.redis_ns
-      assert_equal 'ruby', subject.redis.driver
-      assert_equal 1, subject.redis.timeout
-      assert_equal 4, subject.redis.size
     end
 
   end
@@ -142,9 +120,9 @@ module Qs
     subject{ RedisUrl }
 
     should "build a redis url when passed an ip, port and db" do
-      ip = Factory.string
+      ip   = Factory.string
       port = Factory.integer
-      db = Factory.integer
+      db   = Factory.integer
       expected = "redis://#{ip}:#{port}/#{db}"
       assert_equal expected, subject.new(ip, port, db)
     end
@@ -155,6 +133,19 @@ module Qs
       assert_nil subject.new(Factory.string, Factory.integer, nil)
     end
 
+  end
+
+  class ClientSpy
+    attr_reader :redis_config, :redis
+
+    def initialize(redis_confg)
+      @redis_config  = redis_confg
+      @redis         = Factory.string
+    end
+
+    def enqueue(queue, job_name, params = nil)
+      [queue, job_name, params]
+    end
   end
 
 end

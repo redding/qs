@@ -14,12 +14,17 @@ class Qs::Queue
     end
     subject{ @queue }
 
-    should have_readers :routes
+    should have_readers :routes, :enqueued_jobs
     should have_imeths :name, :redis_key, :job_handler_ns, :job
-    should have_imeths :add
+    should have_imeths :enqueue, :add
+    should have_imeths :reset!
 
-    should "build an empty array for its routes by default" do
+    should "default its routes to an empty array" do
       assert_equal [], subject.routes
+    end
+
+    should "default its enqueued jobs to an empty array" do
+      assert_equal [], subject.enqueued_jobs
     end
 
     should "allow setting its name" do
@@ -68,24 +73,6 @@ class Qs::Queue
       assert_equal expected, route.handler_class_name
     end
 
-    should "add jobs to redis using `add`" do
-      enqueue_args = nil
-      Assert.stub(Qs, :enqueue){ |*args| enqueue_args = args }
-
-      job_name = Factory.string
-      job_params = { Factory.string => Factory.string }
-      subject.add(job_name, job_params)
-      exp = [subject, job_name, job_params]
-      assert_equal exp, enqueue_args
-    end
-
-    should "return what `enqueue` returns using `add`" do
-      fake_job = Factory.string
-      Assert.stub(Qs, :enqueue){ fake_job }
-      result = subject.add(Factory.string, {})
-      assert_equal fake_job, result
-    end
-
     should "know its custom inspect" do
       reference = '0x0%x' % (subject.object_id << 1)
       expected = "#<#{subject.class}:#{reference} " \
@@ -96,6 +83,31 @@ class Qs::Queue
 
     should "require a name when initialized" do
       assert_raises(InvalidError){ Qs::Queue.new }
+    end
+
+  end
+
+  class EnqueueTests < UnitTests
+    setup do
+      @enqueue_args = nil
+      Assert.stub(Qs, :enqueue){ |*args| @enqueue_args = args }
+
+      @job_name   = Factory.string
+      @job_params = { Factory.string => Factory.string }
+    end
+
+    should "add jobs using `enqueue`" do
+      result = subject.enqueue(@job_name, @job_params)
+      exp = [subject, @job_name, @job_params]
+      assert_equal exp, @enqueue_args
+      assert_equal @enqueue_args, result
+    end
+
+    should "add jobs using `add`" do
+      result = subject.add(@job_name, @job_params)
+      exp = [subject, @job_name, @job_params]
+      assert_equal exp, @enqueue_args
+      assert_equal @enqueue_args, result
     end
 
   end
