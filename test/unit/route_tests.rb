@@ -4,6 +4,7 @@ require 'qs/route'
 require 'qs/daemon_data'
 require 'qs/logger'
 require 'qs/job'
+require 'test/support/runner_spy'
 
 class Qs::Route
 
@@ -41,17 +42,16 @@ class Qs::Route
       @job = Qs::Job.new(Factory.string, Factory.string => Factory.string)
       @daemon_data = Qs::DaemonData.new(:logger => Qs::NullLogger.new)
 
-      @runner_spy = RunnerSpy.new
-      Assert.stub(Qs::QsRunner, :new) do |handler_class, args|
-        @runner_spy.handler_class = handler_class
-        @runner_spy.args = args
-        @runner_spy
+      @runner_spy = nil
+      Assert.stub(Qs::QsRunner, :new) do |*args|
+        @runner_spy = RunnerSpy.new(*args)
       end
 
       @route.run(@job, @daemon_data)
     end
 
     should "build and run a qs runner" do
+      assert_not_nil @runner_spy
       assert_equal @route.handler_class, @runner_spy.handler_class
       expected = {
         :job    => @job,
@@ -77,18 +77,5 @@ class Qs::Route
   end
 
   TestHandler = Class.new
-
-  class RunnerSpy
-    attr_accessor :handler_class, :args
-    attr_reader :run_called
-
-    def initialize
-      @run_called = false
-    end
-
-    def run
-      @run_called = true
-    end
-  end
 
 end
