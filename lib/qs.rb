@@ -1,9 +1,7 @@
-require 'hella-redis'
 require 'ns-options'
 require 'qs/version'
-require 'qs/job'
+require 'qs/client'
 require 'qs/job_handler'
-require 'qs/payload'
 require 'qs/queue'
 
 module Qs
@@ -19,14 +17,24 @@ module Qs
       self.config.redis.port,
       self.config.redis.db
     )
-    @redis = HellaRedis::Connection.new(self.redis_config)
+    @client = Client.new(self.redis_config)
+    @redis  = @client.redis
+    true
+  end
+
+  def self.reset!
+    self.config.reset
+    @client = nil
+    @redis  = nil
+    true
   end
 
   def self.enqueue(queue, job_name, params = nil)
-    job = Qs::Job.new(job_name, params || {})
-    encoded_payload = Qs::Payload.encode(job.to_payload)
-    self.redis.with{ |c| c.lpush(queue.redis_key, encoded_payload) }
-    job
+    @client.enqueue(queue, job_name, params)
+  end
+
+  def self.client
+    @client
   end
 
   def self.redis

@@ -5,10 +5,12 @@ module Qs
   class Queue
 
     attr_reader :routes
+    attr_reader :enqueued_jobs
 
     def initialize(&block)
       @job_handler_ns = nil
       @routes = []
+      @enqueued_jobs = []
       self.instance_eval(&block) if !block.nil?
       raise InvalidError, "a queue must have a name" if self.name.nil?
     end
@@ -35,8 +37,13 @@ module Qs
       @routes.push(Qs::Route.new(name, handler_name))
     end
 
-    def add(job_name, params = nil)
+    def enqueue(job_name, params = nil)
       Qs.enqueue(self, job_name, params)
+    end
+    alias :add :enqueue
+
+    def reset!
+      self.enqueued_jobs.clear
     end
 
     def inspect

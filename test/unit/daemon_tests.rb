@@ -259,18 +259,18 @@ module Qs::Daemon
     setup do
       @daemon = @daemon_class.new
       @thread = @daemon.start
+
+      @serialized_payload = Factory.string
+      @connection_spy.add_item_to_list(@queue.redis_key, @serialized_payload)
     end
     subject{ @daemon }
 
     should "call brpop on its redis connection and add work to the worker pool" do
-      serialized_payload = Factory.string
-      @connection_spy.add_item_to_list(@queue.redis_key, serialized_payload)
-
       call = @connection_spy.redis_calls.last
       assert_equal :brpop, call.command
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
-      assert_equal serialized_payload, @worker_pool_spy.work_items.first
+      assert_equal @serialized_payload, @worker_pool_spy.work_items.first
     end
 
   end
