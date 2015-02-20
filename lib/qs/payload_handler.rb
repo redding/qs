@@ -1,8 +1,8 @@
 require 'benchmark'
+require 'qs'
 require 'qs/error_handler'
 require 'qs/job'
 require 'qs/logger'
-require 'qs/payload'
 
 module Qs
 
@@ -38,7 +38,7 @@ module Qs
     def run!
       processed_payload = ProcessedPayload.new
       begin
-        payload = Qs::Payload.decode(@serialized_payload)
+        payload = Qs.deserialize(@serialized_payload)
         job = Qs::Job.parse(payload)
         log_job(job)
         processed_payload.job = job

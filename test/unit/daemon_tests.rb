@@ -109,6 +109,9 @@ module Qs::Daemon
 
   class InitSetupTests < UnitTests
     setup do
+      @qs_init_called = false
+      Assert.stub(Qs, :init){ @qs_init_called = true }
+
       @queue = Qs::Queue.new do
         name(Factory.string)
         job 'test', TestHandler.to_s
@@ -155,6 +158,10 @@ module Qs::Daemon
 
     should "validate its configuration" do
       assert_true @daemon_class.configuration.valid?
+    end
+
+    should "init Qs" do
+      assert_true @qs_init_called
     end
 
     should "know its daemon data" do
@@ -206,6 +213,7 @@ module Qs::Daemon
     desc "and started"
     setup do
       @thread = @daemon.start
+      sleep 0.1
     end
 
     should "return the thread that is running the daemon" do
@@ -330,6 +338,7 @@ module Qs::Daemon
       @daemon_class.shutdown_timeout nil
       @daemon = @daemon_class.new
       @thread = @daemon.start
+      sleep 0.1
       @worker_pool_spy.add_work(Factory.string)
       @daemon.stop
     end
@@ -467,6 +476,7 @@ module Qs::Daemon
       assert_equal 4, config.max_workers
       assert_true config.verbose_logging
       assert_instance_of Qs::NullLogger, config.logger
+      assert_nil subject.shutdown_timeout
       assert_equal [], config.init_procs
       assert_equal [], config.error_procs
       assert_equal [], config.queues

@@ -3,13 +3,13 @@ require 'qs/payload_handler'
 
 require 'qs/daemon_data'
 require 'qs/job'
-require 'qs/payload'
 
 class Qs::PayloadHandler
 
   class UnitTests < Assert::Context
     desc "Qs::PayloadHandler"
     setup do
+      Qs.init
       @handler_class = Qs::PayloadHandler
     end
     subject{ @handler_class }
@@ -25,7 +25,7 @@ class Qs::PayloadHandler
         :routes => [@route_spy]
       })
       @job = Qs::Job.new(@route_spy.name, Factory.string => Factory.string)
-      @serialized_payload = Qs::Payload.encode(@job.to_payload)
+      @serialized_payload = Qs.serialize(@job.to_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
 

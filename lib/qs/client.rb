@@ -1,16 +1,16 @@
 require 'hella-redis'
+require 'qs'
 require 'qs/job'
-require 'qs/payload'
 
 module Qs
 
   module Client
 
-    def self.new(redis)
+    def self.new(*args)
       if !ENV['QS_TEST_MODE']
-        QsClient.new(redis)
+        QsClient.new(*args)
       else
-        TestClient.new(redis)
+        TestClient.new(*args)
       end
     end
 
@@ -49,8 +49,8 @@ module Qs
     private
 
     def enqueue!(queue, job)
-      encoded_payload = Qs::Payload.encode(job.to_payload)
-      self.redis.with{ |c| c.lpush(queue.redis_key, encoded_payload) }
+      serialized_payload = Qs.serialize(job.to_payload)
+      self.redis.with{ |c| c.lpush(queue.redis_key, serialized_payload) }
     end
 
   end

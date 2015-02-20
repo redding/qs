@@ -17,20 +17,33 @@ module Qs
       self.config.redis.port,
       self.config.redis.db
     )
-    @client = Client.new(self.redis_config)
-    @redis  = @client.redis
+
+    @serializer   ||= self.config.serializer
+    @deserializer ||= self.config.deserializer
+    @client       ||= Client.new(self.redis_config)
+    @redis        ||= @client.redis
     true
   end
 
   def self.reset!
     self.config.reset
-    @client = nil
-    @redis  = nil
+    @serializer   = nil
+    @deserializer = nil
+    @client       = nil
+    @redis        = nil
     true
   end
 
   def self.enqueue(queue, job_name, params = nil)
     @client.enqueue(queue, job_name, params)
+  end
+
+  def self.serialize(payload)
+    @serializer.call(payload)
+  end
+
+  def self.deserialize(serialized_payload)
+    @deserializer.call(serialized_payload)
   end
 
   def self.client
@@ -47,6 +60,9 @@ module Qs
 
   class Config
     include NsOptions::Proxy
+
+    option :serializer,   Proc, :default => proc{ |p| ::JSON.dump(p) }
+    option :deserializer, Proc, :default => proc{ |p| ::JSON.load(p) }
 
     namespace :redis do
       option :ip,   :default => 'localhost'

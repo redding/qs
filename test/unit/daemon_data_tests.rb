@@ -23,16 +23,16 @@ class Qs::DaemonData
       end
 
       @daemon_data = Qs::DaemonData.new({
-        :name => @name,
-        :pid_file => @pid_file,
-        :min_workers => @min_workers,
-        :max_workers => @max_workers,
-        :logger => @logger,
-        :verbose_logging => @verbose_logging,
+        :name             => @name,
+        :pid_file         => @pid_file,
+        :min_workers      => @min_workers,
+        :max_workers      => @max_workers,
+        :logger           => @logger,
+        :verbose_logging  => @verbose_logging,
         :shutdown_timeout => @shutdown_timeout,
-        :error_procs => @error_procs,
+        :error_procs      => @error_procs,
         :queue_redis_keys => @queue_redis_keys,
-        :routes => @routes
+        :routes           => @routes
       })
     end
     subject{ @daemon_data }
@@ -47,14 +47,14 @@ class Qs::DaemonData
     should have_imeths :route_for
 
     should "know its attributes" do
-      assert_equal @name, subject.name
-      assert_equal @pid_file, subject.pid_file
-      assert_equal @min_workers, subject.min_workers
-      assert_equal @max_workers, subject.max_workers
-      assert_equal @logger, subject.logger
-      assert_equal @verbose_logging, subject.verbose_logging
+      assert_equal @name,             subject.name
+      assert_equal @pid_file,         subject.pid_file
+      assert_equal @min_workers,      subject.min_workers
+      assert_equal @max_workers,      subject.max_workers
+      assert_equal @logger,           subject.logger
+      assert_equal @verbose_logging,  subject.verbose_logging
       assert_equal @shutdown_timeout, subject.shutdown_timeout
-      assert_equal @error_procs, subject.error_procs
+      assert_equal @error_procs,      subject.error_procs
       assert_equal @queue_redis_keys, subject.queue_redis_keys
     end
 
