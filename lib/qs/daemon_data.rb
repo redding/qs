@@ -17,16 +17,16 @@ module Qs
 
     def initialize(args = nil)
       args ||= {}
-      @name = args[:name]
-      @pid_file = args[:pid_file]
-      @min_workers = args[:min_workers]
-      @max_workers = args[:max_workers]
-      @logger = args[:logger]
-      @verbose_logging = !!args[:verbose_logging]
+      @name             = args[:name]
+      @pid_file         = args[:pid_file]
+      @min_workers      = args[:min_workers]
+      @max_workers      = args[:max_workers]
+      @logger           = args[:logger]
+      @verbose_logging  = !!args[:verbose_logging]
       @shutdown_timeout = args[:shutdown_timeout]
-      @error_procs = args[:error_procs] || []
+      @error_procs      = args[:error_procs] || []
       @queue_redis_keys = args[:queue_redis_keys] || []
-      @routes = build_routes(args[:routes] || [])
+      @routes           = build_routes(args[:routes] || [])
     end
 
     def route_for(name)

@@ -29,6 +29,7 @@ module Qs
 
       def initialize
         self.class.configuration.validate!
+        Qs.init
         @daemon_data = DaemonData.new(self.class.configuration.to_hash)
         @logger = @daemon_data.logger
 
@@ -268,9 +269,9 @@ module Qs
 
       def to_hash
         super.merge({
-          :error_procs => self.error_procs,
+          :error_procs      => self.error_procs,
           :queue_redis_keys => self.queues.map(&:redis_key),
-          :routes => self.routes
+          :routes           => self.routes
         })
       end
 

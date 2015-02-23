@@ -1,6 +1,7 @@
 require 'assert'
 require 'qs/client'
 
+require 'hella-redis/connection_spy'
 require 'qs/job'
 require 'qs/queue'
 
@@ -15,6 +16,11 @@ module Qs::Client
       @redis_config = Qs.redis_config
       @queue = Qs::Queue.new{ name Factory.string }
       @job   = Qs::Job.new(Factory.string, Factory.string => Factory.string)
+
+      # the default JSON is not deterministic (key-values appear in different
+      # order in the JSON string) which causes tests to randomly fail, this
+      # fixes it for testing
+      Assert.stub(Qs, :serialize){ |value| value.to_a.sort }
     end
     teardown do
       ENV['QS_TEST_MODE'] = @current_test_mode
@@ -95,7 +101,7 @@ module Qs::Client
       call = @connection_spy.redis_calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
-      assert_equal @job.to_payload, Qs::Payload.decode(call.args.last)
+      assert_equal Qs.serialize(@job.to_payload), call.args.last
     end
 
     should "default the job's params to an empty hash using `enqueue`" do
@@ -104,7 +110,7 @@ module Qs::Client
       call = @connection_spy.redis_calls.last
       assert_equal :lpush, call.command
       exp = @job.to_payload.merge('params' => {})
-      assert_equal exp, Qs::Payload.decode(call.args.last)
+      assert_equal Qs.serialize(exp), call.args.last
     end
 
     should "return the job when enqueuing" do

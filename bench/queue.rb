@@ -1,4 +1,5 @@
 require 'qs'
+require 'json'
 
 BenchQueue = Qs::Queue.new do
   name 'bench'

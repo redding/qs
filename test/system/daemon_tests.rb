@@ -8,6 +8,9 @@ module Qs::Daemon
   class SystemTests < Assert::Context
     desc "Qs::Daemon"
     setup do
+      Qs.reset!
+      @qs_test_mode = ENV['QS_TEST_MODE']
+      ENV['QS_TEST_MODE'] = nil
       Qs.init
 
       @daemon = AppDaemon.new
@@ -15,6 +18,8 @@ module Qs::Daemon
     end
     teardown do
       @daemon_runner.stop
+      Qs.reset!
+      ENV['QS_TEST_MODE'] = @qs_test_mode
     end
 
   end
