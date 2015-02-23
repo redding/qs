@@ -18,6 +18,7 @@ module Qs::Daemon
     end
     teardown do
       @daemon_runner.stop
+      Qs.redis.with{ |c| c.del('last_error') }
       Qs.reset!
       ENV['QS_TEST_MODE'] = @qs_test_mode
     end
@@ -51,6 +52,22 @@ module Qs::Daemon
     should "run the configured error handler procs" do
       sleep 0.5
       exp = "RuntimeError: #{@error_message}"
+      assert_equal exp, Qs.redis.with{ |c| c.get('last_error') }
+    end
+
+  end
+
+  class TimeoutJobTests < SystemTests
+    desc "with a job that times out"
+    setup do
+      AppQueue.add('timeout')
+    end
+
+    should "run the configured error handler procs" do
+      sleep 1
+      handler_class = AppHandlers::Timeout
+      exp = "Qs::TimeoutError: #{handler_class} timed out " \
+            "(#{handler_class.timeout}s)"
       assert_equal exp, Qs.redis.with{ |c| c.get('last_error') }
     end
 

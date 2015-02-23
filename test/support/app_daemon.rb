@@ -5,8 +5,9 @@ AppQueue = Qs::Queue.new do
 
   job_handler_ns 'AppHandlers'
 
-  job 'basic', 'Basic'
-  job 'error', 'Error'
+  job 'basic',   'Basic'
+  job 'error',   'Error'
+  job 'timeout', 'Timeout'
 end
 
 class AppDaemon
@@ -20,7 +21,9 @@ class AppDaemon
   queue AppQueue
 
   error do |exception, daemon_data, job|
-    if job && job.name == 'error'
+    job_name = job.name if job
+    case(job_name)
+    when 'error', 'timeout'
       message = "#{exception.class}: #{exception.message}"
       Qs.redis.with{ |c| c.set('last_error', message) }
     end
@@ -43,6 +46,16 @@ module AppHandlers
 
     def run!
       raise params['error_message']
+    end
+  end
+
+  class Timeout
+    include Qs::JobHandler
+
+    timeout 0.2
+
+    def run!
+      sleep 10
     end
   end
 

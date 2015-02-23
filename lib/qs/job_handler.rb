@@ -57,6 +57,11 @@ module Qs
 
     module ClassMethods
 
+      def timeout(value = nil)
+        @timeout = value.to_f if value
+        @timeout
+      end
+
       def before_callbacks;      @before_callbacks      ||= []; end
       def after_callbacks;       @after_callbacks       ||= []; end
       def before_init_callbacks; @before_init_callbacks ||= []; end

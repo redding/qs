@@ -10,6 +10,7 @@ module Qs::JobHandler
     end
     subject{ @handler_class }
 
+    should have_imeths :timeout
     should have_imeths :before_callbacks, :after_callbacks
     should have_imeths :before_init_callbacks, :after_init_callbacks
     should have_imeths :before_run_callbacks,  :after_run_callbacks
@@ -19,6 +20,19 @@ module Qs::JobHandler
     should have_imeths :prepend_before, :prepend_after
     should have_imeths :prepend_before_init, :prepend_after_init
     should have_imeths :prepend_before_run,  :prepend_after_run
+
+    should "allow reading/writing its timeout" do
+      assert_nil subject.timeout
+      value = Factory.integer
+      subject.timeout(value)
+      assert_equal value, subject.timeout
+    end
+
+    should "convert timeout values to floats" do
+      value = Factory.float.to_s
+      subject.timeout(value)
+      assert_equal value.to_f, subject.timeout
+    end
 
     should "return an empty array by default using `before_callbacks`" do
       assert_equal [], subject.before_callbacks

@@ -125,7 +125,7 @@ module Qs
     end
     subject{ @config }
 
-    should have_options :serializer, :deserializer
+    should have_options :serializer, :deserializer, :timeout
     should have_namespace :redis
 
     should "know its default serializer/deserializer" do
@@ -136,6 +136,10 @@ module Qs
       assert_equal exp, serialized_payload
       exp = JSON.load(exp)
       assert_equal exp, subject.deserializer.call(serialized_payload)
+    end
+
+    should "know its default timeout" do
+      assert_nil subject.timeout
     end
 
     should "know its default redis options" do

@@ -64,6 +64,8 @@ module Qs
     option :serializer,   Proc, :default => proc{ |p| ::JSON.dump(p) }
     option :deserializer, Proc, :default => proc{ |p| ::JSON.load(p) }
 
+    option :timeout, Float
+
     namespace :redis do
       option :ip,   :default => 'localhost'
       option :port, :default => 6379
