@@ -176,8 +176,8 @@ class Qs::Process
       assert_true @daemon_spy.thread.join_called
     end
 
-    should "not have exec'd the restart cmd" do
-      assert_false @restart_cmd_spy.exec_called
+    should "not run the restart cmd" do
+      assert_false @restart_cmd_spy.run_called
     end
 
     should "have removed the PID file" do
@@ -207,12 +207,9 @@ class Qs::Process
       @process.run
     end
 
-    should "have set env vars for execing the restart cmd" do
+    should "set env vars for restarting and run the restart cmd" do
       assert_equal 'yes', ENV['QS_SKIP_DAEMONIZE']
-    end
-
-    should "have exec'd the restart cmd" do
-      assert_true @restart_cmd_spy.exec_called
+      assert_true @restart_cmd_spy.run_called
     end
 
   end
@@ -220,32 +217,85 @@ class Qs::Process
   class RestartCmdTests < UnitTests
     desc "RestartCmd"
     setup do
-      @restart_cmd = Qs::RestartCmd.new
+      @current_pwd = ENV['PWD']
+      ENV['PWD'] = Factory.path
 
-      @chdir_called = false
-      Assert.stub(Dir, :chdir).with(@restart_cmd.dir){ @chdir_called = true }
+      @ruby_pwd_stat = File.stat(Dir.pwd)
+      env_pwd_stat = File.stat('/dev/null')
+      Assert.stub(File, :stat).with(Dir.pwd){ @ruby_pwd_stat }
+      Assert.stub(File, :stat).with(ENV['PWD']){ env_pwd_stat }
 
-      @exec_called = false
-      Assert.stub(Kernel, :exec).with(*@restart_cmd.argv){ @exec_called = true }
+      @chdir_called_with = nil
+      Assert.stub(Dir, :chdir){ |*args| @chdir_called_with = args }
+
+      @exec_called_with = false
+      Assert.stub(Kernel, :exec){ |*args| @exec_called_with = args }
+
+      @cmd_class = Qs::RestartCmd
+    end
+    teardown do
+      ENV['PWD'] = @current_pwd
     end
     subject{ @restart_cmd }
 
-    should have_readers :argv, :dir
+  end
 
-    should "know its argv and dir" do
-      expected = [ Gem.ruby, $0, ARGV ].flatten
-      assert_equal expected, subject.argv
+  class RestartCmdInitTests < RestartCmdTests
+    desc "when init"
+    setup do
+      @restart_cmd = @cmd_class.new
+    end
+
+    should have_readers :argv, :dir
+    should have_imeths :run
+
+    should "know its argv" do
+      assert_equal [Gem.ruby, $0, ARGV].flatten, subject.argv
+    end
+
+    should "change the dir and run a kernel exec when run" do
+      subject.run
+      assert_equal [subject.dir], @chdir_called_with
+      assert_equal subject.argv,  @exec_called_with
+    end
+
+  end
+
+  class RestartCmdWithPWDEnvNoMatchTests < RestartCmdTests
+    desc "when init with a PWD env variable that doesn't point to ruby working dir"
+    setup do
+      @restart_cmd = @cmd_class.new
+    end
+
+    should "know its dir" do
       assert_equal Dir.pwd, subject.dir
     end
 
-    should "change the dir when exec'd" do
-      subject.exec
-      assert_true @chdir_called
+  end
+
+  class RestartCmdWithPWDEnvInitTests < RestartCmdTests
+    desc "when init with a PWD env variable that points to the ruby working dir"
+    setup do
+      # make ENV['PWD'] point to the same file as Dir.pwd
+      Assert.stub(File, :stat).with(ENV['PWD']){ @ruby_pwd_stat }
+      @restart_cmd = @cmd_class.new
     end
 
-    should "kernel exec its argv when exec'd" do
-      subject.exec
-      assert_true @exec_called
+    should "know its dir" do
+      assert_equal ENV['PWD'], subject.dir
+    end
+
+  end
+
+  class RestartCmdWithNoPWDEnvInitTests < RestartCmdTests
+    desc "when init with a PWD env variable set"
+    setup do
+      ENV.delete('PWD')
+      @restart_cmd = @cmd_class.new
+    end
+
+    should "know its dir" do
+      assert_equal Dir.pwd, subject.dir
     end
 
   end
@@ -307,14 +357,14 @@ class Qs::Process
   end
 
   class RestartCmdSpy
-    attr_reader :exec_called
+    attr_reader :run_called
 
     def initialize
-      @exec_called = false
+      @run_called = false
     end
 
-    def exec
-      @exec_called = true
+    def run
+      @run_called = true
     end
   end
 

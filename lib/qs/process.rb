@@ -38,7 +38,7 @@ module Qs
       thread = @daemon.start
       log "#{@daemon.name} daemon started and ready."
       thread.join
-      exec_restart_cmd if self.restart?
+      run_restart_cmd if self.restart?
     rescue StandardError => exception
       log "Error: #{exception.message}"
       log "#{@daemon.name} daemon never started."
@@ -60,10 +60,10 @@ module Qs
       @logger.info "[Qs] #{message}"
     end
 
-    def exec_restart_cmd
+    def run_restart_cmd
       log "Restarting #{@daemon.name} daemon..."
       ENV['QS_SKIP_DAEMONIZE'] = 'yes'
-      @restart_cmd.exec
+      @restart_cmd.run
     end
 
     def default_if_blank(value, default, &block)
@@ -83,21 +83,22 @@ module Qs
     def initialize
       require 'rubygems'
       @dir  = get_pwd
-      @argv = [ Gem.ruby, $0, ARGV.dup ].flatten
+      @argv = [Gem.ruby, $0, ARGV.dup].flatten
     end
 
-    def exec
+    def run
       Dir.chdir self.dir
       Kernel.exec(*self.argv)
     end
 
-    protected
+    private
 
     # Trick from puma/unicorn. Favor PWD because it contains an unresolved
     # symlink. This is useful when restarting after deploying; the original
     # directory may be removed, but the symlink is pointing to a new
     # directory.
     def get_pwd
+      return Dir.pwd if ENV['PWD'].nil?
       env_stat = File.stat(ENV['PWD'])
       pwd_stat = File.stat(Dir.pwd)
       if env_stat.ino == pwd_stat.ino && env_stat.dev == pwd_stat.dev
