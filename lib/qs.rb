@@ -1,6 +1,7 @@
 require 'ns-options'
 require 'qs/version'
 require 'qs/client'
+require 'qs/daemon'
 require 'qs/job_handler'
 require 'qs/queue'
 
