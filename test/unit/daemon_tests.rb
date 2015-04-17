@@ -278,7 +278,8 @@ module Qs::Daemon
       assert_equal :brpop, call.command
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
-      assert_equal @serialized_payload, @worker_pool_spy.work_items.first
+      exp = RedisItem.new(@queue.redis_key, @serialized_payload)
+      assert_equal exp, @worker_pool_spy.work_items.first
     end
 
   end
@@ -286,23 +287,24 @@ module Qs::Daemon
   class WorkerPoolWorkProcTests < InitSetupTests
     desc "worker pool work proc"
     setup do
-      @payload_handler_spy = nil
+      @ph_spy = nil
       Assert.stub(Qs::PayloadHandler, :new) do |*args|
-        @payload_handler_spy = PayloadHandlerSpy.new(*args)
+        @ph_spy = PayloadHandlerSpy.new(*args)
       end
 
       @daemon = @daemon_class.new
       @thread = @daemon.start
 
-      @serialized_payload = Factory.string
-      @worker_pool_spy.work_proc.call(@serialized_payload)
+      @redis_item = RedisItem.new(Factory.string, Factory.string)
+      @worker_pool_spy.work_proc.call(@redis_item)
     end
     subject{ @daemon }
 
     should "build and run a payload handler" do
-      assert_not_nil @payload_handler_spy
-      assert_equal subject.daemon_data, @payload_handler_spy.daemon_data
-      assert_equal @serialized_payload, @payload_handler_spy.serialized_payload
+      assert_not_nil @ph_spy
+      assert_equal subject.daemon_data,            @ph_spy.daemon_data
+      assert_equal @redis_item.queue_key,          @ph_spy.queue_redis_key
+      assert_equal @redis_item.serialized_payload, @ph_spy.serialized_payload
     end
 
   end
@@ -624,11 +626,12 @@ module Qs::Daemon
   TestHandler = Class.new
 
   class PayloadHandlerSpy
-    attr_reader :daemon_data, :serialized_payload
+    attr_reader :daemon_data, :queue_redis_key, :serialized_payload
     attr_reader :run_called
 
-    def initialize(daemon_data, serialized_payload)
-      @daemon_data = daemon_data
+    def initialize(daemon_data, queue_redis_key, serialized_payload)
+      @daemon_data        = daemon_data
+      @queue_redis_key    = queue_redis_key
       @serialized_payload = serialized_payload
       @run_called = false
     end

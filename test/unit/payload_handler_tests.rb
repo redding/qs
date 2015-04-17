@@ -24,20 +24,27 @@ class Qs::PayloadHandler
         :logger => Qs::NullLogger.new,
         :routes => [@route_spy]
       })
+      @queue_redis_key = Factory.string
       @job = Qs::Job.new(@route_spy.name, Factory.string => Factory.string)
       @serialized_payload = Qs.serialize(@job.to_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
 
-      @payload_handler = @handler_class.new(@daemon_data, @serialized_payload)
+      @payload_handler = @handler_class.new(
+        @daemon_data,
+        @queue_redis_key,
+        @serialized_payload
+      )
     end
     subject{ @payload_handler }
 
-    should have_readers :daemon_data, :serialized_payload, :logger
+    should have_readers :daemon_data, :queue_redis_key, :serialized_payload
+    should have_readers :logger
     should have_imeths :run
 
     should "know its daemon data, payload and logger" do
       assert_equal @daemon_data, subject.daemon_data
+      assert_equal @queue_redis_key, subject.queue_redis_key
       assert_equal @serialized_payload, subject.serialized_payload
       assert_equal @daemon_data.logger, subject.logger.passed_logger
       assert_equal @daemon_data.verbose_logging, subject.logger.verbose_logging
@@ -53,6 +60,8 @@ class Qs::PayloadHandler
 
     should "return a processed payload" do
       assert_instance_of ProcessedPayload, @processed_payload
+      assert_equal @queue_redis_key, @processed_payload.queue_redis_key
+      assert_equal @serialized_payload, @processed_payload.serialized_payload
       assert_equal @job, @processed_payload.job
       assert_equal @route_spy.handler_class, @processed_payload.handler_class
       assert_nil @processed_payload.exception
@@ -97,12 +106,8 @@ class Qs::PayloadHandler
     setup do
       @route_exception = Factory.exception
       Assert.stub(@route_spy, :run){ raise @route_exception }
-      @error_handler_spy = ErrorHandlerSpy.new
-      Assert.stub(Qs::ErrorHandler, :new) do |e, d, j|
-        @error_handler_spy.passed_exception = e
-        @error_handler_spy.passed_daemon_data = d
-        @error_handler_spy.passed_job = j
-        @error_handler_spy
+      Assert.stub(Qs::ErrorHandler, :new) do |*args|
+        @error_handler_spy = ErrorHandlerSpy.new(*args)
       end
 
       @processed_payload = @payload_handler.run
@@ -110,8 +115,14 @@ class Qs::PayloadHandler
 
     should "run an error handler" do
       assert_equal @route_exception, @error_handler_spy.passed_exception
-      assert_equal @daemon_data, @error_handler_spy.passed_daemon_data
-      assert_equal @job, @error_handler_spy.passed_job
+      exp = {
+        :daemon_data        => @daemon_data,
+        :queue_redis_key    => @processed_payload.queue_redis_key,
+        :serialized_payload => @processed_payload.serialized_payload,
+        :job                => @processed_payload.job,
+        :handler_class      => @processed_payload.handler_class
+      }
+      assert_equal exp, @error_handler_spy.context
       assert_true @error_handler_spy.run_called
     end
 
@@ -197,10 +208,12 @@ class Qs::PayloadHandler
   end
 
   class ErrorHandlerSpy
-    attr_accessor :passed_exception, :passed_daemon_data, :passed_job
-    attr_reader :exception, :run_called
+    attr_reader :passed_exception, :context, :exception
+    attr_reader :run_called
 
-    def initialize
+    def initialize(exception, context)
+      @passed_exception = exception
+      @context = context
       @exception = Factory.exception
       @run_called = false
     end

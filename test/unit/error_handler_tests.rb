@@ -2,14 +2,22 @@ require 'assert'
 require 'qs/error_handler'
 
 require 'qs/daemon_data'
-require 'qs/job'
 
 class Qs::ErrorHandler
 
   class UnitTests < Assert::Context
     desc "Qs::ErrorHandler"
     setup do
-      @exception = Factory.exception
+      @exception    = Factory.exception
+      @daemon_data  = Qs::DaemonData.new
+      @context_hash = {
+        :daemon_data        => @daemon_data,
+        :queue_redis_key    => Factory.string,
+        :serialized_payload => Factory.string,
+        :job                => Factory.string,
+        :handler_class      => Factory.string
+      }
+
       @handler_class = Qs::ErrorHandler
     end
     subject{ @handler_class }
@@ -28,22 +36,19 @@ class Qs::ErrorHandler
         @first_called_at = (@call_count += 1)
       end
       second_error_proc = proc{ @second_called_at = (@call_count += 1) }
+      Assert.stub(@daemon_data, :error_procs){ [first_error_proc, second_error_proc] }
 
-      @daemon_data = Qs::DaemonData.new({
-        :error_procs => [first_error_proc, second_error_proc]
-      })
-      @job = Qs::Job.new(Factory.string, Factory.string => Factory.string)
-      @handler = @handler_class.new(@exception, @daemon_data, @job)
+      @handler = @handler_class.new(@exception, @context_hash)
     end
     subject{ @handler }
 
-    should have_readers :exception, :daemon_data, :job
+    should have_readers :exception, :context
     should have_imeths :run
 
-    should "know its exception, daemon data and job" do
+    should "know its exception and context" do
       assert_equal @exception, subject.exception
-      assert_equal @daemon_data, subject.daemon_data
-      assert_equal @job, subject.job
+      exp = Qs::ErrorContext.new(@context_hash)
+      assert_equal exp, subject.context
     end
 
     should "know its error procs" do
@@ -58,11 +63,10 @@ class Qs::ErrorHandler
       @handler.run
     end
 
-    should "pass its exception, daemon data and job to the error procs" do
+    should "pass its exception and context to the error procs" do
       assert_not_nil @args_passed_to_error_proc
-      assert_includes @exception, @args_passed_to_error_proc
-      assert_includes @daemon_data, @args_passed_to_error_proc
-      assert_includes @job, @args_passed_to_error_proc
+      assert_includes subject.exception, @args_passed_to_error_proc
+      assert_includes subject.context,   @args_passed_to_error_proc
     end
 
     should "call each of its error procs" do
@@ -77,9 +81,9 @@ class Qs::ErrorHandler
     setup do
       @proc_exception = Factory.exception
       error_proc = proc{ raise @proc_exception }
-      @daemon_data = Qs::DaemonData.new(:error_procs => [error_proc])
+      Assert.stub(@daemon_data, :error_procs){ [error_proc] }
 
-      @handler = @handler_class.new(@exception, @daemon_data).tap(&:run)
+      @handler = @handler_class.new(@exception, @context_hash).tap(&:run)
     end
     subject{ @handler }
 
@@ -92,35 +96,54 @@ class Qs::ErrorHandler
   class RunWithMultipleErrorProcsThatThrowExceptionsTests < UnitTests
     desc "run with multiple error procs that throw an exception"
     setup do
-      @first_caught_exception = nil
+      @first_caught_exception  = nil
       @second_caught_exception = nil
-      @third_caught_exception = nil
+      @third_caught_exception  = nil
 
       @third_proc_exception = Factory.exception
-      third_proc = proc do |exception, d, j|
+      third_proc = proc do |exception, context|
         @third_caught_exception = exception
         raise @third_proc_exception
       end
 
       @second_proc_exception = Factory.exception
-      second_proc = proc do |exception, d, j|
+      second_proc = proc do |exception, context|
         @second_caught_exception = exception
         raise @second_proc_exception
       end
 
-      first_proc = proc{ |exception, d, j| @first_caught_exception = exception }
+      first_proc = proc{ |exception, context| @first_caught_exception = exception }
 
-      @daemon_data = Qs::DaemonData.new({
-        :error_procs => [first_proc, second_proc, third_proc]
-      })
-      @handler = @handler_class.new(@exception, @daemon_data).tap(&:run)
+      Assert.stub(@daemon_data, :error_procs){ [first_proc, second_proc, third_proc] }
+      @handler = @handler_class.new(@exception, @context_hash).tap(&:run)
     end
     subject{ @handler }
 
     should "call each proc, passing the previously raised exception to the next" do
-      assert_equal @exception, @third_caught_exception
-      assert_equal @third_proc_exception, @second_caught_exception
+      assert_equal @exception,             @third_caught_exception
+      assert_equal @third_proc_exception,  @second_caught_exception
       assert_equal @second_proc_exception, @first_caught_exception
+    end
+
+  end
+
+  class ErrorContextTests < UnitTests
+    desc "ErrorContext"
+    setup do
+      @context = Qs::ErrorContext.new(@context_hash)
+    end
+    subject{ @context }
+
+    should have_readers :daemon_data
+    should have_readers :queue_redis_key, :serialized_payload
+    should have_readers :job, :handler_class
+
+    should "know if it equals another context" do
+      exp = Qs::ErrorContext.new(@context_hash)
+      assert_equal exp, subject
+
+      exp = Qs::ErrorContext.new({})
+      assert_not_equal exp, subject
     end
 
   end
