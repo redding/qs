@@ -52,7 +52,7 @@ module Qs::Client
     subject{ @client }
 
     should have_readers :redis_config, :redis
-    should have_imeths :enqueue
+    should have_imeths :enqueue, :append, :prepend
 
     should "know its redis config" do
       assert_equal @redis_config, subject.redis_config
@@ -60,6 +60,35 @@ module Qs::Client
 
     should "not have a redis connection" do
       assert_nil subject.redis
+    end
+
+  end
+
+  class AppendPrependTests < MixinTests
+    setup do
+      @connection_spy = HellaRedis::ConnectionSpy.new(@client.redis_config)
+      Assert.stub(@client, :redis){ @connection_spy }
+
+      @queue_redis_key    = Factory.string
+      @serialized_payload = Factory.string
+    end
+
+    should "add a serialized payload to the end of a list using `append`" do
+      subject.append(@queue_redis_key, @serialized_payload)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :lpush,              call.command
+      assert_equal @queue_redis_key,    call.args.first
+      assert_equal @serialized_payload, call.args.last
+    end
+
+    should "add a serialized payload to the front of a list using `prepend`" do
+      subject.prepend(@queue_redis_key, @serialized_payload)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :rpush,              call.command
+      assert_equal @queue_redis_key,    call.args.first
+      assert_equal @serialized_payload, call.args.last
     end
 
   end
