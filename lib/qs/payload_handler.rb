@@ -8,12 +8,11 @@ module Qs
 
   class PayloadHandler
 
-    ProcessedPayload = Struct.new(:job, :handler_class, :exception, :time_taken)
+    attr_reader :daemon_data, :queue_redis_key, :serialized_payload, :logger
 
-    attr_reader :daemon_data, :serialized_payload, :logger
-
-    def initialize(daemon_data, serialized_payload)
-      @daemon_data = daemon_data
+    def initialize(daemon_data, queue_redis_key, serialized_payload)
+      @daemon_data        = daemon_data
+      @queue_redis_key    = queue_redis_key
       @serialized_payload = serialized_payload
       @logger = Qs::Logger.new(
         @daemon_data.logger,
@@ -37,6 +36,8 @@ module Qs
 
     def run!
       processed_payload = ProcessedPayload.new
+      processed_payload.queue_redis_key    = @queue_redis_key
+      processed_payload.serialized_payload = @serialized_payload
       begin
         payload = Qs.deserialize(@serialized_payload)
         job = Qs::Job.parse(payload)
@@ -55,11 +56,13 @@ module Qs
     end
 
     def handle_exception(exception, daemon_data, processed_payload)
-      error_handler = Qs::ErrorHandler.new(
-        exception,
-        daemon_data,
-        processed_payload.job
-      ).tap(&:run)
+      error_handler = Qs::ErrorHandler.new(exception, {
+        :daemon_data        => daemon_data,
+        :queue_redis_key    => processed_payload.queue_redis_key,
+        :serialized_payload => processed_payload.serialized_payload,
+        :job                => processed_payload.job,
+        :handler_class      => processed_payload.handler_class
+      }).tap(&:run)
       processed_payload.exception = error_handler.exception
       log_exception(processed_payload.exception)
       processed_payload
@@ -111,6 +114,15 @@ module Qs
     def log_summary(message, level = :info)
       self.logger.summary.send(level, "[Qs] #{message}")
     end
+
+    ProcessedPayload = Struct.new(
+      :queue_redis_key,
+      :serialized_payload,
+      :job,
+      :handler_class,
+      :exception,
+      :time_taken
+    )
 
     module RoundedTime
       ROUND_PRECISION = 2

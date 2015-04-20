@@ -2,12 +2,12 @@ module Qs
 
   class ErrorHandler
 
-    attr_reader :exception, :daemon_data, :job
-    attr_reader :error_procs
+    attr_reader :exception, :context, :error_procs
 
-    def initialize(exception, daemon_data, job = nil)
-      @exception, @daemon_data, @job = exception, daemon_data, job
-      @error_procs = @daemon_data.error_procs.reverse
+    def initialize(exception, context_hash)
+      @exception   = exception
+      @context     = ErrorContext.new(context_hash)
+      @error_procs = context_hash[:daemon_data].error_procs.reverse
     end
 
     # The exception that we are handling can change in the case that the
@@ -15,17 +15,42 @@ module Qs
     # exception will be passed to subsequent error procs. This is designed to
     # avoid "hidden" errors, this way the daemon will log based on the last
     # exception that occurred.
-
     def run
       @error_procs.each do |error_proc|
         begin
-          error_proc.call(@exception, @daemon_data, @job)
+          error_proc.call(@exception, @context)
         rescue StandardError => proc_exception
           @exception = proc_exception
         end
       end
     end
 
+  end
+
+  class ErrorContext
+    attr_reader :daemon_data
+    attr_reader :queue_redis_key, :serialized_payload
+    attr_reader :job, :handler_class
+
+    def initialize(args)
+      @daemon_data        = args[:daemon_data]
+      @queue_redis_key    = args[:queue_redis_key]
+      @serialized_payload = args[:serialized_payload]
+      @job                = args[:job]
+      @handler_class      = args[:handler_class]
+    end
+
+    def ==(other)
+      if other.kind_of?(self.class)
+        self.daemon_data        == other.daemon_data &&
+        self.queue_redis_key    == other.queue_redis_key &&
+        self.serialized_payload == other.serialized_payload &&
+        self.job                == other.job &&
+        self.handler_class      == other.handler_class
+      else
+        super
+      end
+    end
   end
 
 end

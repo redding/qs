@@ -20,8 +20,8 @@ class AppDaemon
 
   queue AppQueue
 
-  error do |exception, daemon_data, job|
-    job_name = job.name if job
+  error do |exception, context|
+    job_name = context.job.name if context.job
     case(job_name)
     when 'error', 'timeout'
       message = "#{exception.class}: #{exception.message}"

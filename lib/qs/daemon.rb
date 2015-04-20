@@ -87,8 +87,12 @@ module Qs
 
       private
 
-      def process(serialized_payload)
-        Qs::PayloadHandler.new(self.daemon_data, serialized_payload).run
+      def process(redis_item)
+        Qs::PayloadHandler.new(
+          self.daemon_data,
+          redis_item.queue_key,
+          redis_item.serialized_payload
+        ).run
       end
 
       def work_loop
@@ -123,7 +127,7 @@ module Qs
         wp = DatWorkerPool.new(
           self.daemon_data.min_workers,
           self.daemon_data.max_workers
-        ){ |serialized_payload| process(serialized_payload) }
+        ){ |redis_item| process(redis_item) }
         wp.on_queue_pop{ @queue_pop_io.signal }
         wp.on_worker_sleep{ @worker_available_io.signal }
         wp.start
@@ -133,9 +137,9 @@ module Qs
       def process_inputs
         wait_for_available_worker
         return unless @worker_pool.worker_available? && @signal.start?
-        redis_key, item = @redis.with{ |c| c.brpop(*@brpop_args) }
+        redis_key, serialized_payload = @redis.with{ |c| c.brpop(*@brpop_args) }
         if redis_key != @signals_redis_key
-          @worker_pool.add_work(item)
+          @worker_pool.add_work(RedisItem.new(redis_key, serialized_payload))
         end
       end
 
@@ -289,6 +293,8 @@ module Qs
         @valid = true
       end
     end
+
+    RedisItem = Struct.new(:queue_key, :serialized_payload)
 
     class IOPipe
       NULL   = File.open('/dev/null', 'w')
