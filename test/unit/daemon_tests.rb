@@ -5,6 +5,7 @@ require 'dat-worker-pool/worker_pool_spy'
 require 'hella-redis/connection_spy'
 require 'ns-options/assert_macros'
 require 'qs/queue'
+require 'qs/redis_item'
 
 module Qs::Daemon
 
@@ -278,7 +279,7 @@ module Qs::Daemon
       assert_equal :brpop, call.command
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
-      exp = RedisItem.new(@queue.redis_key, @serialized_payload)
+      exp = Qs::RedisItem.new(@queue.redis_key, @serialized_payload)
       assert_equal exp, @worker_pool_spy.work_items.first
     end
 
@@ -295,16 +296,15 @@ module Qs::Daemon
       @daemon = @daemon_class.new
       @thread = @daemon.start
 
-      @redis_item = RedisItem.new(Factory.string, Factory.string)
+      @redis_item = Qs::RedisItem.new(Factory.string, Factory.string)
       @worker_pool_spy.work_proc.call(@redis_item)
     end
     subject{ @daemon }
 
     should "build and run a payload handler" do
       assert_not_nil @ph_spy
-      assert_equal subject.daemon_data,            @ph_spy.daemon_data
-      assert_equal @redis_item.queue_key,          @ph_spy.queue_redis_key
-      assert_equal @redis_item.serialized_payload, @ph_spy.serialized_payload
+      assert_equal subject.daemon_data, @ph_spy.daemon_data
+      assert_equal @redis_item,         @ph_spy.redis_item
     end
 
   end
@@ -626,14 +626,12 @@ module Qs::Daemon
   TestHandler = Class.new
 
   class PayloadHandlerSpy
-    attr_reader :daemon_data, :queue_redis_key, :serialized_payload
-    attr_reader :run_called
+    attr_reader :daemon_data, :redis_item, :run_called
 
-    def initialize(daemon_data, queue_redis_key, serialized_payload)
-      @daemon_data        = daemon_data
-      @queue_redis_key    = queue_redis_key
-      @serialized_payload = serialized_payload
-      @run_called = false
+    def initialize(daemon_data, redis_item)
+      @daemon_data = daemon_data
+      @redis_item  = redis_item
+      @run_called  = false
     end
 
     def run
