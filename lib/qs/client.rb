@@ -34,6 +34,14 @@ module Qs
         job
       end
 
+      def append(queue_redis_key, serialized_payload)
+        self.redis.with{ |c| c.lpush(queue_redis_key, serialized_payload) }
+      end
+
+      def prepend(queue_redis_key, serialized_payload)
+        self.redis.with{ |c| c.rpush(queue_redis_key, serialized_payload) }
+      end
+
     end
 
   end
@@ -50,7 +58,7 @@ module Qs
 
     def enqueue!(queue, job)
       serialized_payload = Qs.serialize(job.to_payload)
-      self.redis.with{ |c| c.lpush(queue.redis_key, serialized_payload) }
+      self.append(queue.redis_key, serialized_payload)
     end
 
   end
