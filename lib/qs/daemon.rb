@@ -50,8 +50,6 @@ module Qs
                              "#{Socket.gethostname}-#{::Process.pid}"
 
         @worker_available_io = IOPipe.new
-        @queue_pop_io        = IOPipe.new
-
         @signal = Signal.new(:stop)
       rescue InvalidError => exception
         exception.set_backtrace(caller)
@@ -101,14 +99,13 @@ module Qs
         @worker_pool = build_worker_pool
         process_inputs while @signal.start?
         self.logger.debug "Stopping work loop..."
-        shutdown_worker_pool unless @signal.halt?
+        shutdown_worker_pool
       rescue StandardError => exception
         self.logger.error "Exception occurred, stopping daemon!"
         self.logger.error "#{exception.class}: #{exception.message}"
         self.logger.error exception.backtrace.join("\n")
       ensure
         @worker_available_io.teardown
-        @queue_pop_io.teardown
         @work_loop_thread = nil
         self.logger.debug "Stopped work loop"
       end
@@ -116,9 +113,7 @@ module Qs
       def setup_redis_and_ios
         # clear any signals that are already on the signals redis list
         @client.clear(self.signals_redis_key)
-
         @worker_available_io.setup
-        @queue_pop_io.setup
       end
 
       def build_worker_pool
@@ -126,7 +121,9 @@ module Qs
           self.daemon_data.min_workers,
           self.daemon_data.max_workers
         ){ |redis_item| process(redis_item) }
-        wp.on_queue_pop{ @queue_pop_io.signal }
+        wp.on_worker_error do |worker, exception, redis_item|
+          handle_worker_exception(redis_item)
+        end
         wp.on_worker_sleep{ @worker_available_io.signal }
         wp.start
         wp
@@ -155,31 +152,11 @@ module Qs
       end
 
       def shutdown_worker_pool
-        self.logger.debug "Shutting down worker pool, letting it finish..."
-        if self.daemon_data.shutdown_timeout
-          shutdown_worker_pool_with_timeout(self.daemon_data.shutdown_timeout)
-        else
-          shutdown_worker_pool_without_timeout
-        end
-      end
-
-      def shutdown_worker_pool_with_timeout(timeout)
-        SystemTimer.timeout_after(timeout) do
-          wait_for_worker_pool_to_empty
-          @worker_pool.shutdown(timeout)
-        end
-      rescue Timeout::Error
-        @worker_pool.shutdown(0)
-      end
-
-      def shutdown_worker_pool_without_timeout
-        wait_for_worker_pool_to_empty
-        @worker_pool.shutdown
-      end
-
-      def wait_for_worker_pool_to_empty
-        while !@worker_pool.queue_empty? && !@signal.halt?
-          @queue_pop_io.wait
+        self.logger.debug "Shutting down worker pool"
+        timeout = @signal.stop? ? self.daemon_data.shutdown_timeout : 0
+        @worker_pool.shutdown(timeout)
+        @worker_pool.work_items.each do |ri|
+          @client.prepend(ri.queue_redis_key, ri.serialized_payload)
         end
       end
 
@@ -190,7 +167,21 @@ module Qs
       def wakeup_work_loop_thread
         @client.append(self.signals_redis_key, '.')
         @worker_available_io.signal
-        @queue_pop_io.signal
+      end
+
+      # * This only catches errors that happen outside of running the payload
+      #   handler. The only known use-case for this is dat worker pools
+      #   hard-shutdown errors.
+      # * If there isn't a redis item (this can happen when an idle worker is
+      #   being forced to exit) then we don't need to do anything.
+      # * If we never started processing the redis item, its safe to requeue it.
+      #   Otherwise it happened while processing so the payload handler caught
+      #   it or it happened after the payload handler which we don't care about.
+      def handle_worker_exception(redis_item)
+        return if redis_item.nil?
+        if !redis_item.started
+          @client.prepend(redis_item.queue_redis_key, redis_item.serialized_payload)
+        end
       end
 
     end
@@ -324,8 +315,8 @@ module Qs
       end
 
       def teardown
-        @reader.close
-        @writer.close
+        @reader.close unless @reader === NULL
+        @writer.close unless @writer === NULL
         @reader = NULL
         @writer = NULL
       end

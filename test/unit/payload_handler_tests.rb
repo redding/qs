@@ -94,15 +94,20 @@ class Qs::PayloadHandler
 
   end
 
-  class RunWithExceptionTests < InitTests
-    desc "and run with an exception"
+  class RunWithExceptionSetupTests < InitTests
     setup do
       @route_exception = Factory.exception
       Assert.stub(@route_spy, :run){ raise @route_exception }
       Assert.stub(Qs::ErrorHandler, :new) do |*args|
         @error_handler_spy = ErrorHandlerSpy.new(*args)
       end
+    end
 
+  end
+
+  class RunWithExceptionTests < RunWithExceptionSetupTests
+    desc "and run with an exception"
+    setup do
       @payload_handler.run
     end
 
@@ -133,12 +138,41 @@ class Qs::PayloadHandler
 
   end
 
-  class RunWithExceptionWhileDebuggingTests < InitTests
+  class RunWithShutdownErrorTests < RunWithExceptionSetupTests
+    desc "and run with a dat worker pool shutdown error"
+    setup do
+      @shutdown_error = DatWorkerPool::ShutdownError.new(Factory.text)
+      Assert.stub(@route_spy, :run){ raise @shutdown_error }
+    end
+
+    should "run an error handler if the redis item was started" do
+      Assert.stub(@redis_item, :started){ true }
+      assert_raises{ @payload_handler.run }
+
+      passed_exception = @error_handler_spy.passed_exception
+      assert_instance_of Qs::ShutdownError, passed_exception
+      assert_equal @shutdown_error.message, passed_exception.message
+      assert_equal @shutdown_error.backtrace, passed_exception.backtrace
+      assert_true @error_handler_spy.run_called
+    end
+
+    should "not run an error handler if the redis item was started" do
+      Assert.stub(@redis_item, :started){ false }
+      assert_raises{ @payload_handler.run }
+
+      assert_nil @error_handler_spy
+    end
+
+    should "raise the shutdown error" do
+      assert_raises(@shutdown_error.class){ @payload_handler.run }
+    end
+
+  end
+
+  class RunWithExceptionWhileDebuggingTests < RunWithExceptionSetupTests
     desc "and run with an exception"
     setup do
       ENV['QS_DEBUG'] = '1'
-      @route_exception = Factory.exception
-      Assert.stub(@route_spy, :run){ raise @route_exception }
     end
     teardown do
       ENV.delete('QS_DEBUG')

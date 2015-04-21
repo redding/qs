@@ -8,6 +8,7 @@ AppQueue = Qs::Queue.new do
   job 'basic',   'Basic'
   job 'error',   'Error'
   job 'timeout', 'Timeout'
+  job 'slow',    'Slow'
 end
 
 class AppDaemon
@@ -26,6 +27,8 @@ class AppDaemon
     when 'error', 'timeout'
       message = "#{exception.class}: #{exception.message}"
       Qs.redis.with{ |c| c.set('last_error', message) }
+    when 'slow'
+      Qs.redis.with{ |c| c.set('last_error', exception.class.to_s) }
     end
   end
 
@@ -55,7 +58,16 @@ module AppHandlers
     timeout 0.2
 
     def run!
-      sleep 10
+      sleep 2
+    end
+  end
+
+  class Slow
+    include Qs::JobHandler
+
+    def run!
+      sleep 5
+      Qs.redis.with{ |c| c.set('slow', 'finished') }
     end
   end
 
