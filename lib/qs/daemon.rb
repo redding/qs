@@ -1,10 +1,10 @@
 require 'dat-worker-pool'
-require 'hella-redis'
 require 'ns-options'
 require 'pathname'
 require 'system_timer'
 require 'thread'
 require 'qs'
+require 'qs/client'
 require 'qs/daemon_data'
 require 'qs/logger'
 require 'qs/payload_handler'
@@ -28,15 +28,18 @@ module Qs
       attr_reader :daemon_data, :logger
       attr_reader :signals_redis_key, :queue_redis_keys
 
+      # * Set the size of the client to the max workers + 1. This ensures we
+      #   have 1 connection for fetching work from redis and at least 1
+      #   connection for each worker to requeue its job when hard-shutdown.
       def initialize
         self.class.configuration.validate!
         Qs.init
         @daemon_data = DaemonData.new(self.class.configuration.to_hash)
         @logger = @daemon_data.logger
 
-        @redis = HellaRedis::Connection.new(Qs.redis_config.merge({
+        @client = QsClient.new(Qs.redis_config.merge({
           :timeout => 1,
-          :size    => 2
+          :size    => self.daemon_data.max_workers + 1
         }))
         @queue_redis_keys = self.daemon_data.queue_redis_keys
 
@@ -111,10 +114,8 @@ module Qs
       end
 
       def setup_redis_and_ios
-        # the 0 is the timeout for the `brpop` command, 0 means block indefinitely
-        @brpop_args = [self.signals_redis_key, self.queue_redis_keys, 0].flatten
         # clear any signals that are already on the signals redis list
-        @redis.with{ |c| c.del(self.signals_redis_key) }
+        @client.clear(self.signals_redis_key)
 
         @worker_available_io.setup
         @queue_pop_io.setup
@@ -131,10 +132,17 @@ module Qs
         wp
       end
 
+      # * Shuffle the queue redis keys to avoid queue starvation. Redis will
+      #   pull jobs off queues in the order they are passed to the command, by
+      #   shuffling we ensure they are randomly ordered so every queue should
+      #   get a chance.
+      # * Use 0 for the brpop timeout which means block indefinitely.
       def process_inputs
         wait_for_available_worker
         return unless @worker_pool.worker_available? && @signal.start?
-        redis_key, serialized_payload = @redis.with{ |c| c.brpop(*@brpop_args) }
+
+        args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
+        redis_key, serialized_payload = @client.block_dequeue(*args)
         if redis_key != @signals_redis_key
           @worker_pool.add_work(RedisItem.new(redis_key, serialized_payload))
         end
@@ -180,7 +188,7 @@ module Qs
       end
 
       def wakeup_work_loop_thread
-        @redis.with{ |c| c.lpush(self.signals_redis_key, '.') }
+        @client.append(self.signals_redis_key, '.')
         @worker_available_io.signal
         @queue_pop_io.signal
       end

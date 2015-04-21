@@ -2,8 +2,9 @@ require 'assert'
 require 'qs/daemon'
 
 require 'dat-worker-pool/worker_pool_spy'
-require 'hella-redis/connection_spy'
 require 'ns-options/assert_macros'
+require 'thread'
+require 'qs/client'
 require 'qs/queue'
 require 'qs/redis_item'
 
@@ -125,9 +126,9 @@ module Qs::Daemon
       @daemon_class.error{ Factory.string }
       @daemon_class.queue @queue
 
-      @connection_spy = nil
-      Assert.stub(HellaRedis::Connection, :new) do |*args|
-        @connection_spy = ConnectionSpy.new(*args)
+      @client_spy = nil
+      Assert.stub(Qs::QsClient, :new) do |*args|
+        @client_spy = ClientSpy.new(*args)
       end
 
       @worker_pool_spy = nil
@@ -195,13 +196,13 @@ module Qs::Daemon
       assert_equal data.pid_file, subject.pid_file
     end
 
-    should "build a redis connection" do
-      assert_not_nil @connection_spy
+    should "build a client" do
+      assert_not_nil @client_spy
       exp = Qs.redis_config.merge({
         :timeout => 1,
-        :size    => 2
+        :size    => subject.daemon_data.max_workers + 1
       })
-      assert_equal exp, @connection_spy.config
+      assert_equal exp, @client_spy.redis_config
     end
 
     should "not be running by default" do
@@ -227,8 +228,8 @@ module Qs::Daemon
     end
 
     should "clear the signals list in redis" do
-      call = @connection_spy.redis_calls.first
-      assert_equal :del, call.command
+      call = @client_spy.calls.first
+      assert_equal :clear, call.command
       assert_equal [subject.signals_redis_key], call.args
     end
 
@@ -256,7 +257,7 @@ module Qs::Daemon
     should "sleep its thread and not add work to its worker pool" do
       @thread.join(0.1)
       assert_equal 'sleep', @thread.status
-      @connection_spy.add_item_to_list(@queue.redis_key, Factory.string)
+      @client_spy.append(@queue.redis_key, Factory.string)
       @thread.join(0.1)
       assert_empty @worker_pool_spy.work_items
     end
@@ -270,17 +271,40 @@ module Qs::Daemon
       @thread = @daemon.start
 
       @serialized_payload = Factory.string
-      @connection_spy.add_item_to_list(@queue.redis_key, @serialized_payload)
+      @client_spy.append(@queue.redis_key, @serialized_payload)
     end
     subject{ @daemon }
 
-    should "call brpop on its redis connection and add work to the worker pool" do
-      call = @connection_spy.redis_calls.last
-      assert_equal :brpop, call.command
+    should "call dequeue on its client and add work to the worker pool" do
+      call = @client_spy.calls.last
+      assert_equal :block_dequeue, call.command
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
       exp = Qs::RedisItem.new(@queue.redis_key, @serialized_payload)
       assert_equal exp, @worker_pool_spy.work_items.first
+    end
+
+  end
+
+  class RunningWithMultipleQueuesTests < InitSetupTests
+    desc "running with multiple queues"
+    setup do
+      @other_queue = Qs::Queue.new{ name(Factory.string) }
+      @daemon_class.queue @other_queue
+      @daemon = @daemon_class.new
+
+      @shuffled_keys = @daemon.queue_redis_keys + [Factory.string]
+      Assert.stub(@daemon.queue_redis_keys, :shuffle){ @shuffled_keys }
+
+      @thread = @daemon.start
+    end
+    subject{ @daemon }
+
+    should "shuffle the queue keys to avoid queue starvation" do
+      call = @client_spy.calls.last
+      assert_equal :block_dequeue, call.command
+      exp = [subject.signals_redis_key, @shuffled_keys, 0].flatten
+      assert_equal exp, call.args
     end
 
   end
@@ -639,39 +663,36 @@ module Qs::Daemon
     end
   end
 
-  class ConnectionSpy < HellaRedis::ConnectionSpy
-    def initialize(config)
-      super(config, RedisSpy.new(config))
-    end
+  class ClientSpy < Qs::TestClient
+    attr_reader :calls
 
-    def add_item_to_list(key, value)
-      self.redis_spy.lpush(key, value)
-    end
-  end
-
-  class RedisSpy < HellaRedis::RedisSpy
-    attr_reader :list
-
-    def initialize(config)
-      super(config)
-      @list = []
+    def initialize(*args)
+      super
+      @calls = []
+      @list  = []
       @mutex = Mutex.new
-      @condition_variable = ConditionVariable.new
+      @cv    = ConditionVariable.new
     end
 
-    def lpush(*args)
-      super(*args)
-      self.list.unshift(args)
-      @condition_variable.signal
-    end
-
-    def brpop(*args)
-      super(*args)
-      if self.list.empty?
-        @mutex.synchronize{ @condition_variable.wait(@mutex) }
+    def block_dequeue(*args)
+      @calls << Call.new(:block_dequeue, args)
+      if @list.empty?
+        @mutex.synchronize{ @cv.wait(@mutex) }
       end
-      self.list.pop
+      @list.shift
     end
+
+    def append(queue_redis_key, serialized_payload)
+      @calls << Call.new(:append, [queue_redis_key, serialized_payload])
+      @list  << [queue_redis_key, serialized_payload]
+      @cv.signal
+    end
+
+    def clear(queue_redis_key)
+      @calls << Call.new(:clear, [queue_redis_key])
+    end
+
+    Call = Struct.new(:command, :args)
   end
 
 end

@@ -34,12 +34,20 @@ module Qs
         job
       end
 
+      def block_dequeue(*args)
+        self.redis.with{ |c| c.brpop(*args) }
+      end
+
       def append(queue_redis_key, serialized_payload)
         self.redis.with{ |c| c.lpush(queue_redis_key, serialized_payload) }
       end
 
       def prepend(queue_redis_key, serialized_payload)
         self.redis.with{ |c| c.rpush(queue_redis_key, serialized_payload) }
+      end
+
+      def clear(redis_key)
+        self.redis.with{ |c| c.del(redis_key) }
       end
 
     end
