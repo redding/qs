@@ -52,7 +52,9 @@ module Qs::Client
     subject{ @client }
 
     should have_readers :redis_config, :redis
-    should have_imeths :enqueue, :append, :prepend
+    should have_imeths :enqueue, :block_dequeue
+    should have_imeths :append, :prepend
+    should have_imeths :clear
 
     should "know its redis config" do
       assert_equal @redis_config, subject.redis_config
@@ -64,13 +66,22 @@ module Qs::Client
 
   end
 
-  class AppendPrependTests < MixinTests
+  class RedisCallTests < MixinTests
     setup do
       @connection_spy = HellaRedis::ConnectionSpy.new(@client.redis_config)
       Assert.stub(@client, :redis){ @connection_spy }
 
       @queue_redis_key    = Factory.string
       @serialized_payload = Factory.string
+    end
+
+    should "block pop from the front of a list using `block_dequeue`" do
+      args = (1..Factory.integer(3)).map{ Factory.string } + [Factory.integer]
+      subject.block_dequeue(*args)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :brpop, call.command
+      assert_equal args,   call.args
     end
 
     should "add a serialized payload to the end of a list using `append`" do
@@ -89,6 +100,14 @@ module Qs::Client
       assert_equal :rpush,              call.command
       assert_equal @queue_redis_key,    call.args.first
       assert_equal @serialized_payload, call.args.last
+    end
+
+    should "del a list using `clear`" do
+      subject.clear(@queue_redis_key)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :del,               call.command
+      assert_equal [@queue_redis_key], call.args
     end
 
   end
