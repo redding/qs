@@ -35,7 +35,7 @@ class Qs::Queue
 
     should "know its redis key" do
       result = subject.redis_key
-      assert_equal "queues:#{subject.name}", result
+      assert_equal RedisKey.new(subject.name), result
       assert_same result, subject.redis_key
     end
 
@@ -108,6 +108,23 @@ class Qs::Queue
       exp = [subject, @job_name, @job_params]
       assert_equal exp, @enqueue_args
       assert_equal @enqueue_args, result
+    end
+
+  end
+
+  class RedisKeyTests < UnitTests
+    desc "RedisKey"
+    subject{ RedisKey }
+
+    should have_imeths :parse_name, :new
+
+    should "know how to build a redis key" do
+      assert_equal "queues:#{@queue.name}", subject.new(@queue.name)
+    end
+
+    should "know how to parse a queue name from a key" do
+      redis_key = subject.new(@queue.name)
+      assert_equal @queue.name, subject.parse_name(redis_key)
     end
 
   end

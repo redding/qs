@@ -1,3 +1,5 @@
+require 'qs/queue'
+
 module Qs
 
   class ErrorHandler
@@ -29,12 +31,12 @@ module Qs
 
   class ErrorContext
     attr_reader :daemon_data
-    attr_reader :queue_redis_key, :serialized_payload
+    attr_reader :queue_name, :serialized_payload
     attr_reader :job, :handler_class
 
     def initialize(args)
       @daemon_data        = args[:daemon_data]
-      @queue_redis_key    = args[:queue_redis_key]
+      @queue_name         = Queue::RedisKey.parse_name(args[:queue_redis_key].to_s)
       @serialized_payload = args[:serialized_payload]
       @job                = args[:job]
       @handler_class      = args[:handler_class]
@@ -43,7 +45,7 @@ module Qs
     def ==(other)
       if other.kind_of?(self.class)
         self.daemon_data        == other.daemon_data &&
-        self.queue_redis_key    == other.queue_redis_key &&
+        self.queue_name         == other.queue_name &&
         self.serialized_payload == other.serialized_payload &&
         self.job                == other.job &&
         self.handler_class      == other.handler_class

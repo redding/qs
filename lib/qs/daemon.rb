@@ -8,6 +8,7 @@ require 'qs'
 require 'qs/daemon_data'
 require 'qs/logger'
 require 'qs/payload_handler'
+require 'qs/redis_item'
 
 module Qs
 
@@ -88,11 +89,7 @@ module Qs
       private
 
       def process(redis_item)
-        Qs::PayloadHandler.new(
-          self.daemon_data,
-          redis_item.queue_key,
-          redis_item.serialized_payload
-        ).run
+        Qs::PayloadHandler.new(self.daemon_data, redis_item).run
       end
 
       def work_loop
@@ -293,8 +290,6 @@ module Qs
         @valid = true
       end
     end
-
-    RedisItem = Struct.new(:queue_key, :serialized_payload)
 
     class IOPipe
       NULL   = File.open('/dev/null', 'w')

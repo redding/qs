@@ -8,12 +8,11 @@ module Qs
 
   class PayloadHandler
 
-    attr_reader :daemon_data, :queue_redis_key, :serialized_payload, :logger
+    attr_reader :daemon_data, :redis_item, :logger
 
-    def initialize(daemon_data, queue_redis_key, serialized_payload)
-      @daemon_data        = daemon_data
-      @queue_redis_key    = queue_redis_key
-      @serialized_payload = serialized_payload
+    def initialize(daemon_data, redis_item)
+      @daemon_data = daemon_data
+      @redis_item  = redis_item
       @logger = Qs::Logger.new(
         @daemon_data.logger,
         @daemon_data.verbose_logging
@@ -21,51 +20,43 @@ module Qs
     end
 
     def run
-      processed_payload = nil
       log_received
-      benchmark = Benchmark.measure do
-        processed_payload = run!
-      end
-      processed_payload.time_taken = RoundedTime.new(benchmark.real)
-      log_complete(processed_payload)
-      raise_if_debugging!(processed_payload.exception)
-      processed_payload
+      benchmark = Benchmark.measure{ run!(@daemon_data, @redis_item) }
+      @redis_item.time_taken = RoundedTime.new(benchmark.real)
+      log_complete(@redis_item)
+      raise_if_debugging!(@redis_item.exception)
     end
 
     private
 
-    def run!
-      processed_payload = ProcessedPayload.new
-      processed_payload.queue_redis_key    = @queue_redis_key
-      processed_payload.serialized_payload = @serialized_payload
-      begin
-        payload = Qs.deserialize(@serialized_payload)
-        job = Qs::Job.parse(payload)
-        log_job(job)
-        processed_payload.job = job
+    def run!(daemon_data, redis_item)
+      redis_item.started = true
 
-        route = @daemon_data.route_for(job.name)
-        log_handler_class(route.handler_class)
-        processed_payload.handler_class = route.handler_class
+      payload = Qs.deserialize(redis_item.serialized_payload)
+      job = Qs::Job.parse(payload)
+      log_job(job)
+      redis_item.job = job
 
-        route.run(job, @daemon_data)
-      rescue StandardError => exception
-        handle_exception(exception, @daemon_data, processed_payload)
-      end
-      processed_payload
+      route = daemon_data.route_for(job.name)
+      log_handler_class(route.handler_class)
+      redis_item.handler_class = route.handler_class
+
+      route.run(job, daemon_data)
+      redis_item.finished = true
+    rescue StandardError => exception
+      handle_exception(exception, daemon_data, redis_item)
     end
 
-    def handle_exception(exception, daemon_data, processed_payload)
+    def handle_exception(exception, daemon_data, redis_item)
       error_handler = Qs::ErrorHandler.new(exception, {
         :daemon_data        => daemon_data,
-        :queue_redis_key    => processed_payload.queue_redis_key,
-        :serialized_payload => processed_payload.serialized_payload,
-        :job                => processed_payload.job,
-        :handler_class      => processed_payload.handler_class
+        :queue_redis_key    => redis_item.queue_redis_key,
+        :serialized_payload => redis_item.serialized_payload,
+        :job                => redis_item.job,
+        :handler_class      => redis_item.handler_class
       }).tap(&:run)
-      processed_payload.exception = error_handler.exception
-      log_exception(processed_payload.exception)
-      processed_payload
+      redis_item.exception = error_handler.exception
+      log_exception(redis_item.exception)
     end
 
     def raise_if_debugging!(exception)
@@ -85,17 +76,17 @@ module Qs
       log_verbose "  Handler: #{handler_class}"
     end
 
-    def log_complete(processed_payload)
-      log_verbose "===== Completed in #{processed_payload.time_taken}ms ====="
+    def log_complete(redis_item)
+      log_verbose "===== Completed in #{redis_item.time_taken}ms ====="
       summary_line_args = {
-        'time'    => processed_payload.time_taken,
-        'handler' => processed_payload.handler_class
+        'time'    => redis_item.time_taken,
+        'handler' => redis_item.handler_class
       }
-      if (job = processed_payload.job)
+      if (job = redis_item.job)
         summary_line_args['job']    = job.name
         summary_line_args['params'] = job.params
       end
-      if (exception = processed_payload.exception)
+      if (exception = redis_item.exception)
         summary_line_args['error'] = "#{exception.inspect}"
       end
       log_summary SummaryLine.new(summary_line_args)
@@ -114,15 +105,6 @@ module Qs
     def log_summary(message, level = :info)
       self.logger.summary.send(level, "[Qs] #{message}")
     end
-
-    ProcessedPayload = Struct.new(
-      :queue_redis_key,
-      :serialized_payload,
-      :job,
-      :handler_class,
-      :exception,
-      :time_taken
-    )
 
     module RoundedTime
       ROUND_PRECISION = 2

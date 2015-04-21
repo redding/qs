@@ -3,6 +3,7 @@ require 'qs/payload_handler'
 
 require 'qs/daemon_data'
 require 'qs/job'
+require 'qs/redis_item'
 
 class Qs::PayloadHandler
 
@@ -24,28 +25,23 @@ class Qs::PayloadHandler
         :logger => Qs::NullLogger.new,
         :routes => [@route_spy]
       })
-      @queue_redis_key = Factory.string
       @job = Qs::Job.new(@route_spy.name, Factory.string => Factory.string)
-      @serialized_payload = Qs.serialize(@job.to_payload)
+      serialized_payload = Qs.serialize(@job.to_payload)
+      @redis_item = Qs::RedisItem.new(Factory.string, serialized_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
 
-      @payload_handler = @handler_class.new(
-        @daemon_data,
-        @queue_redis_key,
-        @serialized_payload
-      )
+      @payload_handler = @handler_class.new(@daemon_data, @redis_item)
     end
     subject{ @payload_handler }
 
-    should have_readers :daemon_data, :queue_redis_key, :serialized_payload
+    should have_readers :daemon_data, :redis_item
     should have_readers :logger
     should have_imeths :run
 
-    should "know its daemon data, payload and logger" do
+    should "know its daemon data, redis item and logger" do
       assert_equal @daemon_data, subject.daemon_data
-      assert_equal @queue_redis_key, subject.queue_redis_key
-      assert_equal @serialized_payload, subject.serialized_payload
+      assert_equal @redis_item,  subject.redis_item
       assert_equal @daemon_data.logger, subject.logger.passed_logger
       assert_equal @daemon_data.verbose_logging, subject.logger.verbose_logging
     end
@@ -55,44 +51,41 @@ class Qs::PayloadHandler
   class RunTests < InitTests
     desc "and run"
     setup do
-      @processed_payload = @payload_handler.run
+      @payload_handler.run
     end
 
-    should "return a processed payload" do
-      assert_instance_of ProcessedPayload, @processed_payload
-      assert_equal @queue_redis_key, @processed_payload.queue_redis_key
-      assert_equal @serialized_payload, @processed_payload.serialized_payload
-      assert_equal @job, @processed_payload.job
-      assert_equal @route_spy.handler_class, @processed_payload.handler_class
-      assert_nil @processed_payload.exception
-      assert_instance_of Float, @processed_payload.time_taken
-    end
-
-    should "run a route for the passed payload" do
+    should "run a route for the redis item" do
       assert_true @route_spy.run_called
       assert_equal @job, @route_spy.job_passed_to_run
       assert_equal @daemon_data, @route_spy.daemon_data_passed_to_run
     end
 
-    should "log its processing of the payload" do
+    should "build up its redis item as it processes it" do
+      assert_equal @job, @redis_item.job
+      assert_equal @route_spy.handler_class, @redis_item.handler_class
+      assert_nil @redis_item.exception
+      assert_instance_of Float, @redis_item.time_taken
+    end
+
+    should "log its processing of the redis item" do
       logger_spy = subject.logger
       expected = "[Qs] ===== Running job ====="
       assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs]   Job:     #{@processed_payload.job.name.inspect}"
+      expected = "[Qs]   Job:     #{@redis_item.job.name.inspect}"
       assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs]   Params:  #{@processed_payload.job.params.inspect}"
+      expected = "[Qs]   Params:  #{@redis_item.job.params.inspect}"
       assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs]   Handler: #{@processed_payload.handler_class}"
+      expected = "[Qs]   Handler: #{@redis_item.handler_class}"
       assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs] ===== Completed in #{@processed_payload.time_taken}ms ====="
+      expected = "[Qs] ===== Completed in #{@redis_item.time_taken}ms ====="
       assert_includes expected, logger_spy.verbose.info_logged
       assert_empty logger_spy.verbose.error_logged
 
       expected = SummaryLine.new({
-        'time'    => @processed_payload.time_taken,
-        'handler' => @processed_payload.handler_class,
-        'job'     => @processed_payload.job.name,
-        'params'  => @processed_payload.job.params
+        'time'    => @redis_item.time_taken,
+        'handler' => @redis_item.handler_class,
+        'job'     => @redis_item.job.name,
+        'params'  => @redis_item.job.params
       })
       assert_equal 1, logger_spy.summary.info_logged.size
       assert_equal "[Qs] #{expected}", logger_spy.summary.info_logged.first
@@ -110,32 +103,32 @@ class Qs::PayloadHandler
         @error_handler_spy = ErrorHandlerSpy.new(*args)
       end
 
-      @processed_payload = @payload_handler.run
+      @payload_handler.run
     end
 
     should "run an error handler" do
       assert_equal @route_exception, @error_handler_spy.passed_exception
       exp = {
         :daemon_data        => @daemon_data,
-        :queue_redis_key    => @processed_payload.queue_redis_key,
-        :serialized_payload => @processed_payload.serialized_payload,
-        :job                => @processed_payload.job,
-        :handler_class      => @processed_payload.handler_class
+        :queue_redis_key    => @redis_item.queue_redis_key,
+        :serialized_payload => @redis_item.serialized_payload,
+        :job                => @redis_item.job,
+        :handler_class      => @redis_item.handler_class
       }
-      assert_equal exp, @error_handler_spy.context
+      assert_equal exp, @error_handler_spy.context_hash
       assert_true @error_handler_spy.run_called
     end
 
-    should "return a processed payload with an exception" do
-      assert_equal @error_handler_spy.exception, @processed_payload.exception
+    should "store the exception on the redis item" do
+      assert_equal @error_handler_spy.exception, @redis_item.exception
     end
 
-    should "log its processing of the payload" do
+    should "log its processing of the redis item" do
       logger_spy = subject.logger
-      exception = @processed_payload.exception
+      exception = @redis_item.exception
       backtrace = exception.backtrace.join("\n")
-      expected = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
-      assert_equal expected, logger_spy.verbose.error_logged.first
+      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      assert_equal exp, logger_spy.verbose.error_logged.first
     end
 
   end
@@ -208,14 +201,13 @@ class Qs::PayloadHandler
   end
 
   class ErrorHandlerSpy
-    attr_reader :passed_exception, :context, :exception
-    attr_reader :run_called
+    attr_reader :passed_exception, :context_hash, :exception, :run_called
 
-    def initialize(exception, context)
+    def initialize(exception, context_hash)
       @passed_exception = exception
-      @context = context
-      @exception = Factory.exception
-      @run_called = false
+      @context_hash     = context_hash
+      @exception        = Factory.exception
+      @run_called       = false
     end
 
     def run

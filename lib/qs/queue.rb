@@ -21,7 +21,7 @@ module Qs
     end
 
     def redis_key
-      @redis_key ||= "queues:#{name}"
+      @redis_key ||= RedisKey.new(self.name)
     end
 
     def job_handler_ns(value = nil)
@@ -54,6 +54,16 @@ module Qs
     end
 
     InvalidError = Class.new(RuntimeError)
+
+    module RedisKey
+      def self.parse_name(key)
+        key.split(':').last
+      end
+
+      def self.new(name)
+        "queues:#{name}"
+      end
+    end
 
   end
 
