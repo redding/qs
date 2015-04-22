@@ -17,7 +17,7 @@ module Qs
     end
 
     def to_payload
-      { 'name'       => self.name,
+      { 'name'       => self.name.to_s,
         'params'     => stringify(self.params),
         'created_at' => self.created_at.to_i
       }

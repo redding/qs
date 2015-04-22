@@ -6,6 +6,10 @@ class Qs::Job
   class UnitTests < Assert::Context
     desc "Qs::Job"
     setup do
+      @name       = Factory.string
+      @params     = { Factory.string => Factory.string }
+      @created_at = Factory.time
+
       @job_class = Qs::Job
     end
     subject{ @job_class }
@@ -14,9 +18,9 @@ class Qs::Job
 
     should "parse a job from a payload hash" do
       payload = {
-        'name'     => Factory.string,
-        'params'   => { Factory.string => Factory.string },
-        'created_at' => Factory.time.to_i
+        'name'       => @name,
+        'params'     => @params,
+        'created_at' => @created_at.to_i
       }
       job = subject.parse(payload)
       assert_instance_of subject, job
@@ -33,9 +37,6 @@ class Qs::Job
       @current_time = Factory.time
       Assert.stub(Time, :now).with{ @current_time }
 
-      @name     = Factory.string
-      @params   = { Factory.string => Factory.string }
-      @created_at = Factory.time
       @job = @job_class.new(@name, @params, @created_at)
     end
     subject{ @job }
@@ -44,8 +45,8 @@ class Qs::Job
     should have_imeths :to_payload
 
     should "know its name, params and created at" do
-      assert_equal @name,     subject.name
-      assert_equal @params,   subject.params
+      assert_equal @name,       subject.name
+      assert_equal @params,     subject.params
       assert_equal @created_at, subject.created_at
     end
 
@@ -57,11 +58,16 @@ class Qs::Job
     should "return a payload hash using `to_payload`" do
       payload_hash = subject.to_payload
       expected = {
-        'name'     => @name,
-        'params'   => @params,
+        'name'       => @name,
+        'params'     => @params,
         'created_at' => @created_at.to_i
       }
       assert_equal expected, payload_hash
+    end
+
+    should "convert job names to strings using `to_payload`" do
+      job = @job_class.new(@name.to_sym, @params)
+      assert_equal @name, job.to_payload['name']
     end
 
     should "convert params keys to strings using `to_payload`" do
