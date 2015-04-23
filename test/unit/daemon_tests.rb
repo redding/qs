@@ -215,7 +215,7 @@ module Qs::Daemon
     desc "and started"
     setup do
       @thread = @daemon.start
-      sleep 0.1
+      @thread.join 0.1
     end
 
     should "return the thread that is running the daemon" do
@@ -237,7 +237,7 @@ module Qs::Daemon
       assert_not_nil @worker_pool_spy
       assert_equal @daemon_class.min_workers, @worker_pool_spy.min_workers
       assert_equal @daemon_class.max_workers, @worker_pool_spy.max_workers
-      assert_equal 1, @worker_pool_spy.on_queue_pop_callbacks.size
+      assert_equal 1, @worker_pool_spy.on_worker_error_callbacks.size
       assert_equal 1, @worker_pool_spy.on_worker_sleep_callbacks.size
       assert_true @worker_pool_spy.start_called
     end
@@ -333,12 +333,44 @@ module Qs::Daemon
 
   end
 
+  class WorkerPoolOnWorkerErrorTests < InitSetupTests
+    desc "worker pool on worker error proc"
+    setup do
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+
+      @exception  = Factory.exception
+      @redis_item = Qs::RedisItem.new(Factory.string, Factory.string)
+      @callback   = @worker_pool_spy.on_worker_error_callbacks.first
+    end
+    subject{ @daemon }
+
+    should "requeue the redis item if it wasn't started" do
+      @redis_item.started = false
+      @callback.call('worker', @exception, @redis_item)
+      call = @client_spy.calls.detect{ |c| c.command == :prepend }
+      assert_not_nil call
+      assert_equal @redis_item.queue_redis_key,    call.args.first
+      assert_equal @redis_item.serialized_payload, call.args.last
+    end
+
+    should "not requeue the redis item if it was started" do
+      @redis_item.started = true
+      @callback.call('worker', @exception, @redis_item)
+      assert_nil @client_spy.calls.detect{ |c| c.command == :prepend }
+    end
+
+    should "do nothing if not passed a redis item" do
+      assert_nothing_raised{ @callback.call(@exception, nil) }
+    end
+
+  end
+
   class StopTests < StartTests
     desc "and then stopped"
     setup do
-      Assert.stub(SystemTimer, :timeout_after).with(
-        @daemon_class.shutdown_timeout
-      ){ |&block| block.call }
+      @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
+      @worker_pool_spy.add_work(@redis_item)
 
       @daemon.stop true
     end
@@ -348,64 +380,19 @@ module Qs::Daemon
       assert_equal @daemon_class.shutdown_timeout, @worker_pool_spy.shutdown_timeout
     end
 
+    should "requeue any work left on the pool" do
+      call = @client_spy.calls.last
+      assert_equal :prepend, call.command
+      assert_equal @redis_item.queue_redis_key,    call.args.first
+      assert_equal @redis_item.serialized_payload, call.args.last
+    end
+
     should "stop the work loop thread" do
       assert_false @thread.alive?
     end
 
     should "not be running" do
-      assert_equal false, subject.running?
-    end
-
-  end
-
-  class StoppedWithWorkAndNoShutdownTimeoutTests < InitSetupTests
-    desc "and stopped without a shutdown timeout and work on the pool"
-    setup do
-      @daemon_class.shutdown_timeout nil
-      @daemon = @daemon_class.new
-      @thread = @daemon.start
-      sleep 0.1
-      @worker_pool_spy.add_work(Factory.string)
-      @daemon.stop
-    end
-    teardown do
-      @daemon.halt true
-    end
-
-    should "shutdown the worker pool once the work has been processed" do
-      assert_false @worker_pool_spy.shutdown_called
-      @worker_pool_spy.pop_work
-      @thread.join
-      assert_true @worker_pool_spy.shutdown_called
-      assert_nil @worker_pool_spy.shutdown_timeout
-    end
-
-  end
-
-  class StoppedWithWorkAndShutdownTimeoutTests < InitSetupTests
-    desc "and stopped with a shutdown timeout and work on the pool"
-    setup do
-      @daemon_class.shutdown_timeout 0.5
-      @daemon = @daemon_class.new
-      @thread = @daemon.start
-      @worker_pool_spy.add_work(Factory.string)
-      @daemon.stop
-    end
-    teardown do
-      @daemon.halt true
-    end
-
-    should "shutdown the worker pool once the work has been processed" do
-      @worker_pool_spy.work_items.pop
-      @thread.join
-      assert_true @worker_pool_spy.shutdown_called
-      assert_equal @daemon_class.shutdown_timeout, @worker_pool_spy.shutdown_timeout
-    end
-
-    should "force shutdown the worker pool if the work is never processed" do
-      @thread.join
-      assert_true @worker_pool_spy.shutdown_called
-      assert_equal 0, @worker_pool_spy.shutdown_timeout
+      assert_false subject.running?
     end
 
   end
@@ -421,7 +408,7 @@ module Qs::Daemon
     subject{ @daemon }
 
     should "not be running" do
-      assert_equal false, subject.running?
+      assert_false subject.running?
     end
 
   end
@@ -429,11 +416,22 @@ module Qs::Daemon
   class HaltTests < StartTests
     desc "and then halted"
     setup do
+      @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
+      @worker_pool_spy.add_work(@redis_item)
+
       @daemon.halt true
     end
 
-    should "not shutdown the worker pool" do
-      assert_false @worker_pool_spy.shutdown_called
+    should "shutdown the worker pool with a 0 timeout" do
+      assert_true @worker_pool_spy.shutdown_called
+      assert_equal 0, @worker_pool_spy.shutdown_timeout
+    end
+
+    should "requeue any work left on the pool" do
+      call = @client_spy.calls.last
+      assert_equal :prepend, call.command
+      assert_equal @redis_item.queue_redis_key,    call.args.first
+      assert_equal @redis_item.serialized_payload, call.args.last
     end
 
     should "stop the work loop thread" do
@@ -441,7 +439,7 @@ module Qs::Daemon
     end
 
     should "not be running" do
-      assert_equal false, subject.running?
+      assert_false subject.running?
     end
 
   end
@@ -457,7 +455,7 @@ module Qs::Daemon
     subject{ @daemon }
 
     should "not be running" do
-      assert_equal false, subject.running?
+      assert_false subject.running?
     end
 
   end
@@ -682,14 +680,20 @@ module Qs::Daemon
       @list.shift
     end
 
-    def append(queue_redis_key, serialized_payload)
-      @calls << Call.new(:append, [queue_redis_key, serialized_payload])
-      @list  << [queue_redis_key, serialized_payload]
+    def append(*args)
+      @calls << Call.new(:append, args)
+      @list  << args
       @cv.signal
     end
 
-    def clear(queue_redis_key)
-      @calls << Call.new(:clear, [queue_redis_key])
+    def prepend(*args)
+      @calls << Call.new(:prepend, args)
+      @list  << args
+      @cv.signal
+    end
+
+    def clear(*args)
+      @calls << Call.new(:clear, args)
     end
 
     Call = Struct.new(:command, :args)

@@ -1,4 +1,5 @@
 require 'benchmark'
+require 'dat-worker-pool'
 require 'qs'
 require 'qs/error_handler'
 require 'qs/job'
@@ -43,6 +44,13 @@ module Qs
 
       route.run(job, daemon_data)
       redis_item.finished = true
+    rescue DatWorkerPool::ShutdownError => exception
+      if redis_item.started
+        error = ShutdownError.new(exception.message)
+        error.set_backtrace(exception.backtrace)
+        handle_exception(error, daemon_data, redis_item)
+      end
+      raise exception
     rescue StandardError => exception
       handle_exception(exception, daemon_data, redis_item)
     end
@@ -122,5 +130,7 @@ module Qs
     end
 
   end
+
+  ShutdownError = Class.new(DatWorkerPool::ShutdownError)
 
 end
