@@ -39,6 +39,10 @@ module Qs
     @client.enqueue(queue, job_name, params)
   end
 
+  def self.push(queue_name, payload)
+    @client.push(queue_name, payload)
+  end
+
   def self.serialize(payload)
     @serializer.call(payload)
   end
