@@ -1,3 +1,5 @@
+require 'qs'
+require 'qs/job'
 require 'qs/job_handler'
 require 'qs/runner'
 
@@ -15,7 +17,7 @@ module Qs
       args = (args || {}).dup
       super(handler_class, {
         :job    => args.delete(:job),
-        :params => args.delete(:params),
+        :params => normalize_params(args.delete(:params) || {}),
         :logger => args.delete(:logger)
       })
       args.each{ |key, value| self.handler.send("#{key}=", value) }
@@ -25,6 +27,15 @@ module Qs
 
     def run
       self.handler.run
+    end
+
+    private
+
+    # Stringify and serialize/deserialize to ensure params are valid and are
+    # in the format they would normally be when a handler is built and run.
+    def normalize_params(params)
+      params = Job::StringifyParams.new(params)
+      Qs.deserialize(Qs.serialize(params))
     end
 
   end

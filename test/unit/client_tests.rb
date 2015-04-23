@@ -2,6 +2,7 @@ require 'assert'
 require 'qs/client'
 
 require 'hella-redis/connection_spy'
+require 'qs'
 require 'qs/job'
 require 'qs/queue'
 
@@ -12,17 +13,15 @@ module Qs::Client
     setup do
       @current_test_mode = ENV['QS_TEST_MODE']
       ENV['QS_TEST_MODE'] = 'yes'
+      Qs.init
 
       @redis_config = Qs.redis_config
-      @queue = Qs::Queue.new{ name Factory.string }
-      @job   = Qs::Job.new(Factory.string, Factory.string => Factory.string)
-
-      # the default JSON is not deterministic (key-values appear in different
-      # order in the JSON string) which causes tests to randomly fail, this
-      # fixes it for testing
-      Assert.stub(Qs, :serialize){ |value| value.to_a.sort }
+      @queue        = Qs::Queue.new{ name Factory.string }
+      @job_name     = Factory.string
+      @job_params   = { Factory.string => Factory.string }
     end
     teardown do
+      Qs.reset!
       ENV['QS_TEST_MODE'] = @current_test_mode
     end
     subject{ Qs::Client }
@@ -44,10 +43,7 @@ module Qs::Client
 
   class MixinTests < UnitTests
     setup do
-      @client_class = Class.new do
-        include Qs::Client
-      end
-      @client = @client_class.new(@redis_config)
+      @client = FakeClient.new(@redis_config)
     end
     subject{ @client }
 
@@ -63,6 +59,20 @@ module Qs::Client
 
     should "not have a redis connection" do
       assert_nil subject.redis
+    end
+
+    should "build a job, enqueue it and return it using `enqueue`" do
+      result = subject.enqueue(@queue, @job_name, @job_params)
+      enqueued_job = subject.enqueued_jobs.last
+      assert_equal @job_name,   enqueued_job.name
+      assert_equal @job_params, enqueued_job.params
+      assert_equal enqueued_job, result
+    end
+
+    should "default the job's params to an empty hash using `enqueue`" do
+      subject.enqueue(@queue, @job_name)
+      enqueued_job = subject.enqueued_jobs.last
+      assert_equal({}, enqueued_job.params)
     end
 
     should "raise a not implemented error using `push`" do
@@ -151,35 +161,24 @@ module Qs::Client
     end
 
     should "add jobs to the queue's redis list using `enqueue`" do
-      subject.enqueue(@queue, @job.name, @job.params)
+      subject.enqueue(@queue, @job_name, @job_params)
 
       call = @connection_spy.redis_calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
-      assert_equal Qs.serialize(@job.to_payload), call.args.last
-    end
-
-    should "default the job's params to an empty hash using `enqueue`" do
-      subject.enqueue(@queue, @job.name)
-
-      call = @connection_spy.redis_calls.last
-      assert_equal :lpush, call.command
-      exp = @job.to_payload.merge('params' => {})
-      assert_equal Qs.serialize(exp), call.args.last
-    end
-
-    should "return the job when enqueuing" do
-      result = subject.enqueue(@queue, @job.name, @job.params)
-      assert_equal @job, result
+      payload = Qs.deserialize(call.args.last)
+      assert_equal @job_name,   payload['name']
+      assert_equal @job_params, payload['params']
     end
 
     should "add payloads to the queue's redis list using `push`" do
-      subject.push(@queue.name, @job.to_payload)
+      job = Qs::Job.new(@job_name, @job_params)
+      subject.push(@queue.name, job.to_payload)
 
       call = @connection_spy.redis_calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
-      assert_equal Qs.serialize(@job.to_payload), call.args.last
+      assert_equal Qs.serialize(job.to_payload), call.args.last
     end
 
   end
@@ -200,6 +199,11 @@ module Qs::Client
   class TestClientInitTests < TestClientTests
     desc "when init"
     setup do
+      @serialized_payload = nil
+      Assert.stub(Qs, :serialize){ |payload| @serialized_payload = payload }
+
+      @job = Qs::Job.new(@job_name, @job_params)
+
       @client = @client_class.new(@redis_config)
     end
     subject{ @client }
@@ -218,11 +222,19 @@ module Qs::Client
 
     should "track all the jobs it enqueues on the queue" do
       assert_empty @queue.enqueued_jobs
-      result = subject.enqueue(@queue, @job.name, @job.params)
+      result = subject.enqueue(@queue, @job_name, @job_params)
 
       job = @queue.enqueued_jobs.last
-      assert_equal @job, job
-      assert_equal @job, result
+      assert_equal @job_name,   job.name
+      assert_equal @job_params, job.params
+      assert_equal job, result
+    end
+
+    should "serialize the jobs when enqueueing" do
+      subject.enqueue(@queue, @job_name, @job_params)
+
+      job = @queue.enqueued_jobs.last
+      assert_equal job.to_payload, @serialized_payload
     end
 
     should "track all the payloads pushed onto a queue" do
@@ -231,7 +243,7 @@ module Qs::Client
       pushed_item = subject.pushed_items.last
       assert_instance_of Qs::TestClient::PushedItem, pushed_item
       assert_equal @queue.name,     pushed_item.queue_name
-      assert_equal @job.to_payload, pushed_item.payload
+      assert_equal @job.to_payload,  pushed_item.payload
     end
 
     should "clear its pushed items when reset" do
@@ -241,6 +253,17 @@ module Qs::Client
       assert_empty subject.pushed_items
     end
 
+  end
+
+  class FakeClient
+    include Qs::Client
+
+    attr_reader :enqueued_jobs
+
+    def enqueue!(queue, job)
+      @enqueued_jobs ||= []
+      @enqueued_jobs << job
+    end
   end
 
 end

@@ -108,6 +108,9 @@ module Qs
     private
 
     def enqueue!(queue, job)
+      # attempt to serialize (and then throw away) the job payload, this will
+      # error on the developer if it can't serialize the job
+      Qs.serialize(job.to_payload)
       queue.enqueued_jobs << job
     end
 
