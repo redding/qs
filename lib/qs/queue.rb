@@ -8,7 +8,6 @@ module Qs
     attr_reader :enqueued_jobs
 
     def initialize(&block)
-      @job_handler_ns = nil
       @routes = []
       @enqueued_jobs = []
       self.instance_eval(&block) if !block.nil?
