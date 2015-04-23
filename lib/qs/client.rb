@@ -1,6 +1,7 @@
 require 'hella-redis'
 require 'qs'
 require 'qs/job'
+require 'qs/queue'
 
 module Qs
 
@@ -34,6 +35,10 @@ module Qs
         job
       end
 
+      def push(queue_name, payload)
+        raise NotImplementedError
+      end
+
       def block_dequeue(*args)
         self.redis.with{ |c| c.brpop(*args) }
       end
@@ -62,6 +67,12 @@ module Qs
       @redis = HellaRedis::Connection.new(self.redis_config)
     end
 
+    def push(queue_name, payload)
+      queue_redis_key    = Queue::RedisKey.new(queue_name)
+      serialized_payload = Qs.serialize(payload)
+      self.append(queue_redis_key, serialized_payload)
+    end
+
     private
 
     def enqueue!(queue, job)
@@ -74,10 +85,24 @@ module Qs
   class TestClient
     include Client
 
+    attr_reader :pushed_items
+
     def initialize(*args)
       super
       require 'hella-redis/connection_spy'
       @redis = HellaRedis::ConnectionSpy.new(self.redis_config)
+      @pushed_items = []
+    end
+
+    def push(queue_name, payload)
+      # attempt to serialize (and then throw away) the payload, this will error
+      # on the developer if it can't be serialized
+      Qs.serialize(payload)
+      @pushed_items << PushedItem.new(queue_name, payload)
+    end
+
+    def reset!
+      @pushed_items.clear
     end
 
     private
@@ -85,6 +110,8 @@ module Qs
     def enqueue!(queue, job)
       queue.enqueued_jobs << job
     end
+
+    PushedItem = Struct.new(:queue_name, :payload)
 
   end
 

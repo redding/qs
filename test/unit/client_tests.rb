@@ -52,7 +52,8 @@ module Qs::Client
     subject{ @client }
 
     should have_readers :redis_config, :redis
-    should have_imeths :enqueue, :block_dequeue
+    should have_imeths :enqueue, :push
+    should have_imeths :block_dequeue
     should have_imeths :append, :prepend
     should have_imeths :clear
 
@@ -62,6 +63,12 @@ module Qs::Client
 
     should "not have a redis connection" do
       assert_nil subject.redis
+    end
+
+    should "raise a not implemented error using `push`" do
+      assert_raises(NotImplementedError) do
+        subject.push(Factory.string, Factory.string)
+      end
     end
 
   end
@@ -166,6 +173,15 @@ module Qs::Client
       assert_equal @job, result
     end
 
+    should "add payloads to the queue's redis list using `push`" do
+      subject.push(@queue.name, @job.to_payload)
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :lpush, call.command
+      assert_equal @queue.redis_key, call.args.first
+      assert_equal Qs.serialize(@job.to_payload), call.args.last
+    end
+
   end
 
   class TestClientTests < UnitTests
@@ -188,9 +204,16 @@ module Qs::Client
     end
     subject{ @client }
 
+    should have_readers :pushed_items
+    should have_imeths :reset!
+
     should "build a redis connection spy" do
       assert_instance_of HellaRedis::ConnectionSpy, subject.redis
       assert_equal @redis_config, subject.redis.config
+    end
+
+    should "default its pushed items" do
+      assert_equal [], subject.pushed_items
     end
 
     should "track all the jobs it enqueues on the queue" do
@@ -200,6 +223,22 @@ module Qs::Client
       job = @queue.enqueued_jobs.last
       assert_equal @job, job
       assert_equal @job, result
+    end
+
+    should "track all the payloads pushed onto a queue" do
+      subject.push(@queue.name, @job.to_payload)
+
+      pushed_item = subject.pushed_items.last
+      assert_instance_of Qs::TestClient::PushedItem, pushed_item
+      assert_equal @queue.name,     pushed_item.queue_name
+      assert_equal @job.to_payload, pushed_item.payload
+    end
+
+    should "clear its pushed items when reset" do
+      subject.push(@queue.name, @job.to_payload)
+      assert_not_empty subject.pushed_items
+      subject.reset!
+      assert_empty subject.pushed_items
     end
 
   end

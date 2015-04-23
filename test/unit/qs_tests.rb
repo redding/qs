@@ -21,7 +21,8 @@ module Qs
     subject{ @module }
 
     should have_imeths :config, :configure, :init, :reset!
-    should have_imeths :enqueue, :serialize, :deserialize
+    should have_imeths :enqueue, :push
+    should have_imeths :serialize, :deserialize
     should have_imeths :client, :redis, :redis_config
 
     should "know its config" do
@@ -79,10 +80,25 @@ module Qs
     end
 
     should "call enqueue on its client using `enqueue`" do
-      queue  = Qs::Queue.new{ name Factory.string }
-      args   = [queue, Factory.string, { Factory.string => Factory.string }]
-      result = subject.enqueue(*args)
-      assert_equal args, result
+      queue      = Qs::Queue.new{ name Factory.string }
+      job_name   = Factory.string
+      job_params = { Factory.string => Factory.string }
+      subject.enqueue(queue, job_name, job_params)
+
+      call = @client_spy.enqueue_calls.last
+      assert_equal queue,      call.queue
+      assert_equal job_name,   call.job_name
+      assert_equal job_params, call.job_params
+    end
+
+    should "call push on its client using `push`" do
+      queue_name = Factory.string
+      payload    = { Factory.string => Factory.string }
+      subject.push(queue_name, payload)
+
+      call = @client_spy.push_calls.last
+      assert_equal queue_name, call.queue_name
+      assert_equal payload,    call.payload
     end
 
     should "use the configured serializer using `serialize`" do
@@ -177,15 +193,25 @@ module Qs
 
   class ClientSpy
     attr_reader :redis_config, :redis
+    attr_reader :enqueue_calls, :push_calls
 
     def initialize(redis_confg)
       @redis_config  = redis_confg
       @redis         = Factory.string
+      @enqueue_calls = []
+      @push_calls    = []
     end
 
-    def enqueue(queue, job_name, params = nil)
-      [queue, job_name, params]
+    def enqueue(queue, job_name, job_params = nil)
+      @enqueue_calls << EnqueueCall.new(queue, job_name, job_params)
     end
+
+    def push(queue_name, payload)
+      @push_calls << PushCall.new(queue_name, payload)
+    end
+
+    EnqueueCall = Struct.new(:queue, :job_name, :job_params)
+    PushCall    = Struct.new(:queue_name, :payload)
   end
 
 end
