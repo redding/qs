@@ -1,12 +1,18 @@
 require 'assert'
 require 'qs/test_runner'
 
+require 'qs'
+
 class Qs::TestRunner
 
   class UnitTests < Assert::Context
     desc "Qs::TestRunner"
     setup do
+      Qs.init
       @runner_class = Qs::TestRunner
+    end
+    teardown do
+      Qs.reset!
     end
     subject{ @runner_class }
 
@@ -62,6 +68,20 @@ class Qs::TestRunner
 
     should "not call its job handler's after callbacks" do
       assert_nil @handler.after_called
+    end
+
+    should "stringify and serialize the params passed to it" do
+      key, value = Factory.string.to_sym, Factory.string
+      params = {
+        key    => value,
+        'date' => Date.today
+      }
+      runner = @runner_class.new(@handler_class, :params => params)
+      exp = {
+        key.to_s => value,
+        'date'   => params['date'].to_s
+      }
+      assert_equal exp, runner.params
     end
 
     should "raise an invalid error when not passed a job handler" do

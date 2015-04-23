@@ -18,7 +18,7 @@ module Qs
 
     def to_payload
       { 'name'       => self.name.to_s,
-        'params'     => stringify(self.params),
+        'params'     => StringifyParams.new(self.params),
         'created_at' => self.created_at.to_i
       }
     end
@@ -50,14 +50,16 @@ module Qs
       raise(BadJobError, problem) if problem
     end
 
-    def stringify(object)
-      case(object)
-      when Hash
-        object.inject({}){ |h, (k, v)| h.merge(k.to_s => stringify(v)) }
-      when Array
-        object.map{ |item| stringify(item) }
-      else
-        object
+    module StringifyParams
+      def self.new(object)
+        case(object)
+        when Hash
+          object.inject({}){ |h, (k, v)| h.merge(k.to_s => self.new(v)) }
+        when Array
+          object.map{ |item| self.new(item) }
+        else
+          object
+        end
       end
     end
 

@@ -70,19 +70,11 @@ class Qs::Job
       assert_equal @name, job.to_payload['name']
     end
 
-    should "convert params keys to strings using `to_payload`" do
-      params = {
-        :basic    => Factory.string,
-        :in_array => [ { :test => Factory.string } ],
-        :nested   => { :test => Factory.string }
-      }
+    should "convert stringify its params using `to_payload`" do
+      params = { Factory.string.to_sym => Factory.string }
       job = @job_class.new(@name, params)
-      expected = {
-        'basic'    => params[:basic],
-        'in_array' => [ { 'test' => params[:in_array].first[:test] } ],
-        'nested'   => { 'test' => params[:nested][:test] }
-      }
-      assert_equal expected, job.to_payload['params']
+      exp = StringifyParams.new(params)
+      assert_equal exp, job.to_payload['params']
     end
 
     should "raise an error when given an invalid name or params" do
@@ -110,6 +102,29 @@ class Qs::Job
       assert_not_equal non_matching, subject
       non_matching = @job_class.new(@name, @params, Factory.time)
       assert_not_equal non_matching, subject
+    end
+
+  end
+
+  class StringifyParamsTests < UnitTests
+    desc "StringifyParams"
+    subject{ StringifyParams }
+
+    should have_imeths :new
+
+    should "convert all hash keys to strings" do
+      key, value = Factory.string.to_sym, Factory.string
+      result = subject.new({
+        key    => value,
+        :hash  => { key => [value] },
+        :array => [{ key => value }]
+      })
+      exp = {
+        key.to_s => value,
+        'hash'   => { key.to_s => [value] },
+        'array'  => [{ key.to_s => value }]
+      }
+      assert_equal exp, result
     end
 
   end
