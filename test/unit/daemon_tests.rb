@@ -565,54 +565,6 @@ module Qs::Daemon
 
   end
 
-  class IOPipeTests < UnitTests
-    desc "IOPipe"
-    setup do
-      @io = IOPipe.new
-    end
-    subject{ @io }
-
-    should have_readers :reader, :writer
-    should have_imeths :wait, :signal
-    should have_imeths :setup, :teardown
-
-    should "default its reader and writer" do
-      assert_same IOPipe::NULL, subject.reader
-      assert_same IOPipe::NULL, subject.writer
-    end
-
-    should "be able to wait until signalled" do
-      subject.setup
-
-      thread = Thread.new{ subject.wait }
-      thread.join(0.1)
-      assert_equal 'sleep', thread.status
-
-      subject.signal
-      thread.join
-      assert_false thread.status
-    end
-
-    should "set its reader and writer to an IO pipe when setup" do
-      subject.setup
-      assert_instance_of ::IO, subject.reader
-      assert_instance_of ::IO, subject.writer
-    end
-
-    should "close its reader/writer and set them to defaults when torn down" do
-      subject.setup
-      reader = subject.reader
-      writer = subject.writer
-
-      subject.teardown
-      assert_true reader.closed?
-      assert_true writer.closed?
-      assert_same IOPipe::NULL, subject.reader
-      assert_same IOPipe::NULL, subject.writer
-    end
-
-  end
-
   class SignalTests < UnitTests
     desc "Signal"
     setup do

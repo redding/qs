@@ -6,6 +6,7 @@ require 'thread'
 require 'qs'
 require 'qs/client'
 require 'qs/daemon_data'
+require 'qs/io_pipe'
 require 'qs/logger'
 require 'qs/payload_handler'
 require 'qs/redis_item'
@@ -15,6 +16,8 @@ module Qs
   module Daemon
 
     InvalidError = Class.new(ArgumentError)
+
+    SIGNAL = '.'.freeze
 
     def self.included(klass)
       klass.class_eval do
@@ -124,7 +127,7 @@ module Qs
         wp.on_worker_error do |worker, exception, redis_item|
           handle_worker_exception(redis_item)
         end
-        wp.on_worker_sleep{ @worker_available_io.signal }
+        wp.on_worker_sleep{ @worker_available_io.write(SIGNAL) }
         wp.start
         wp
       end
@@ -147,7 +150,7 @@ module Qs
 
       def wait_for_available_worker
         if !@worker_pool.worker_available? && @signal.start?
-          @worker_available_io.wait
+          @worker_available_io.wait.read
         end
       end
 
@@ -165,8 +168,8 @@ module Qs
       end
 
       def wakeup_work_loop_thread
-        @client.append(self.signals_redis_key, '.')
-        @worker_available_io.signal
+        @client.append(self.signals_redis_key, SIGNAL)
+        @worker_available_io.write(SIGNAL)
       end
 
       # * This only catches errors that happen outside of running the payload
@@ -287,38 +290,6 @@ module Qs
         end
         self.routes.each(&:validate!)
         @valid = true
-      end
-    end
-
-    class IOPipe
-      NULL   = File.open('/dev/null', 'w')
-      SIGNAL = '.'.freeze
-
-      attr_reader :reader, :writer
-
-      def initialize
-        @reader = NULL
-        @writer = NULL
-      end
-
-      def wait
-        ::IO.select([@reader])
-        @reader.read_nonblock(SIGNAL.bytesize)
-      end
-
-      def signal
-        @writer.write_nonblock(SIGNAL)
-      end
-
-      def setup
-        @reader, @writer = ::IO.pipe
-      end
-
-      def teardown
-        @reader.close unless @reader === NULL
-        @writer.close unless @writer === NULL
-        @reader = NULL
-        @writer = NULL
       end
     end
 
