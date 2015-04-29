@@ -1,5 +1,8 @@
 require 'qs'
 
+LOGGER = Logger.new(ROOT_PATH.join('log/app_daemon.log').to_s)
+LOGGER.datetime_format = "" # turn off the datetime in the logs
+
 AppQueue = Qs::Queue.new do
   name 'app_main'
 
@@ -16,7 +19,7 @@ class AppDaemon
 
   name 'app'
 
-  logger Logger.new(ROOT_PATH.join('log/app_daemon.log').to_s)
+  logger LOGGER
   verbose_logging true
 
   queue AppQueue
