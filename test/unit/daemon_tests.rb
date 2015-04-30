@@ -286,6 +286,34 @@ module Qs::Daemon
 
   end
 
+  class RunningWithErrorWhileDequeuingTests < InitSetupTests
+    desc "running with an error while dequeueing"
+    setup do
+      @daemon = @daemon_class.new
+      @thread = @daemon.start
+
+      @block_dequeue_calls = 0
+      Assert.stub(@client_spy, :block_dequeue) do
+        @block_dequeue_calls += 1
+        raise RuntimeError
+      end
+      # cause the daemon to loop, its sleeping on the original block_dequeue
+      # call that happened before the stub
+      @client_spy.append(@queue.redis_key, Factory.string)
+      @thread.join(0.1)
+    end
+    subject{ @daemon }
+
+    should "not cause the thread to exit" do
+      assert_true @thread.alive?
+      assert_equal 1, @block_dequeue_calls
+      @thread.join(1)
+      assert_true @thread.alive?
+      assert_equal 2, @block_dequeue_calls
+    end
+
+  end
+
   class RunningWithMultipleQueuesTests < InitSetupTests
     desc "running with multiple queues"
     setup do

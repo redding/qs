@@ -97,20 +97,20 @@ module Qs
       end
 
       def work_loop
-        self.logger.debug "Starting work loop..."
+        log "Starting work loop", :debug
         setup_redis_and_ios
         @worker_pool = build_worker_pool
         process_inputs while @signal.start?
-        self.logger.debug "Stopping work loop..."
+        log "Stopping work loop", :debug
         shutdown_worker_pool
       rescue StandardError => exception
-        self.logger.error "Exception occurred, stopping daemon!"
-        self.logger.error "#{exception.class}: #{exception.message}"
-        self.logger.error exception.backtrace.join("\n")
+        log "Exception occurred, stopping daemon!", :error
+        log "#{exception.class}: #{exception.message}", :error
+        log exception.backtrace.join("\n"), :error
       ensure
         @worker_available_io.teardown
         @work_loop_thread = nil
-        self.logger.debug "Stopped work loop"
+        log "Stopped work loop", :debug
       end
 
       def setup_redis_and_ios
@@ -125,7 +125,7 @@ module Qs
           self.daemon_data.max_workers
         ){ |redis_item| process(redis_item) }
         wp.on_worker_error do |worker, exception, redis_item|
-          handle_worker_exception(redis_item)
+          handle_worker_exception(exception, redis_item)
         end
         wp.on_worker_sleep{ @worker_available_io.write(SIGNAL) }
         wp.start
@@ -137,14 +137,23 @@ module Qs
       #   shuffling we ensure they are randomly ordered so every queue should
       #   get a chance.
       # * Use 0 for the brpop timeout which means block indefinitely.
+      # * Rescue runtime errors so the daemon thread doesn't fail if redis is
+      #   temporarily down. Sleep for a second to keep the thread from thrashing
+      #   by repeatedly erroring if redis is down.
       def process_inputs
         wait_for_available_worker
         return unless @worker_pool.worker_available? && @signal.start?
 
-        args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
-        redis_key, serialized_payload = @client.block_dequeue(*args)
-        if redis_key != @signals_redis_key
-          @worker_pool.add_work(RedisItem.new(redis_key, serialized_payload))
+        begin
+          args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
+          redis_key, serialized_payload = @client.block_dequeue(*args)
+          if redis_key != @signals_redis_key
+            @worker_pool.add_work(RedisItem.new(redis_key, serialized_payload))
+          end
+        rescue RuntimeError => exception
+          log "Error dequeueing #{exception.message.inspect}", :error
+          log exception.backtrace.join("\n"), :error
+          sleep 1
         end
       end
 
@@ -155,7 +164,7 @@ module Qs
       end
 
       def shutdown_worker_pool
-        self.logger.debug "Shutting down worker pool"
+        log "Shutting down worker pool", :debug
         timeout = @signal.stop? ? self.daemon_data.shutdown_timeout : 0
         @worker_pool.shutdown(timeout)
         @worker_pool.work_items.each do |ri|
@@ -180,11 +189,20 @@ module Qs
       # * If we never started processing the redis item, its safe to requeue it.
       #   Otherwise it happened while processing so the payload handler caught
       #   it or it happened after the payload handler which we don't care about.
-      def handle_worker_exception(redis_item)
+      def handle_worker_exception(exception, redis_item)
         return if redis_item.nil?
         if !redis_item.started
+          log "Worker error, requeueing job because it hasn't started", :error
           @client.prepend(redis_item.queue_redis_key, redis_item.serialized_payload)
+        else
+          log "Worker error after job was processed, ignoring", :error
         end
+        log "#{exception.class}: #{exception.message}", :error
+        log exception.backtrace.join("\n"), :error
+      end
+
+      def log(message, level = :info)
+        self.logger.send(level, "[Qs] #{message}")
       end
 
     end
