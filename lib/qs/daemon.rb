@@ -102,12 +102,13 @@ module Qs
         @worker_pool = build_worker_pool
         process_inputs while @signal.start?
         log "Stopping work loop", :debug
-        shutdown_worker_pool
       rescue StandardError => exception
-        log "Exception occurred, stopping daemon!", :error
+        @signal.set :stop
+        log "Error occurred while running the daemon, exiting", :error
         log "#{exception.class}: #{exception.message}", :error
         log exception.backtrace.join("\n"), :error
       ensure
+        shutdown_worker_pool
         @worker_available_io.teardown
         @work_loop_thread = nil
         log "Stopped work loop", :debug
@@ -164,9 +165,15 @@ module Qs
       end
 
       def shutdown_worker_pool
-        log "Shutting down worker pool", :debug
+        return unless @worker_pool
         timeout = @signal.stop? ? self.daemon_data.shutdown_timeout : 0
+        if timeout
+          log "Shutting down, waiting up to #{timeout} seconds for work to finish"
+        else
+          log "Shutting down, waiting for work to finish"
+        end
         @worker_pool.shutdown(timeout)
+        log "Requeueing #{@worker_pool.work_items.size} job(s)"
         @worker_pool.work_items.each do |ri|
           @client.prepend(ri.queue_redis_key, ri.serialized_payload)
         end
