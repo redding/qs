@@ -44,9 +44,17 @@ class Qs::IOPipe
     should "be able to read/write values" do
       subject.setup
 
-      value = Factory.string
+      value = Factory.string(NUMBER_OF_BYTES)
       subject.write(value)
       assert_equal value, subject.read
+    end
+
+    should "only read/write a fixed number of bytes" do
+      subject.setup
+
+      value = Factory.string
+      subject.write(value)
+      assert_equal value[0, NUMBER_OF_BYTES], subject.read
     end
 
     should "be able to wait until there is something to read" do
