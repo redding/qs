@@ -3,6 +3,7 @@ module Qs
   class IOPipe
 
     NULL = File.open('/dev/null', 'w')
+    NUMBER_OF_BYTES = 1
 
     attr_reader :reader, :writer
 
@@ -23,11 +24,11 @@ module Qs
     end
 
     def read
-      @reader.gets.strip
+      @reader.read_nonblock(NUMBER_OF_BYTES)
     end
 
     def write(value)
-      @writer.puts(value)
+      @writer.write_nonblock(value[0, NUMBER_OF_BYTES])
     end
 
     def wait
