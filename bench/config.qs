@@ -8,6 +8,7 @@ LOGGER = if ENV['BENCH_REPORT']
 else
   Logger.new(STDOUT)
 end
+LOGGER.datetime_format = "" # turn off the datetime in the logs
 
 PROGRESS_IO = if ENV['BENCH_PROGRESS_IO']
   ::IO.for_fd(ENV['BENCH_PROGRESS_IO'].to_i)

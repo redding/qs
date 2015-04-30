@@ -1,73 +1,102 @@
+require 'qs/io_pipe'
 require 'qs/pid_file'
 
 module Qs
 
   class Process
 
-    attr_reader :daemon, :name, :pid_file, :restart_cmd
+    attr_reader :daemon, :name
+    attr_reader :pid_file, :signal_io, :restart_cmd
 
     def initialize(daemon, options = nil)
       options ||= {}
       @daemon = daemon
+      @name   = ignore_if_blank(ENV['QS_PROCESS_NAME']) || "qs-#{@daemon.name}"
       @logger = @daemon.logger
-      @pid_file = PIDFile.new(@daemon.pid_file)
+
+      @pid_file    = PIDFile.new(@daemon.pid_file)
+      @signal_io   = IOPipe.new
       @restart_cmd = RestartCmd.new
 
-      @name = ignore_if_blank(ENV['QS_PROCESS_NAME']) || "qs-#{@daemon.name}"
-
-      @daemonize = !!options[:daemonize]
-      @skip_daemonize = !!ignore_if_blank(ENV['QS_SKIP_DAEMONIZE'])
-      @restart = false
+      skip_daemonize = ignore_if_blank(ENV['QS_SKIP_DAEMONIZE'])
+      @daemonize = !!options[:daemonize] && !skip_daemonize
     end
 
     def run
       ::Process.daemon(true) if self.daemonize?
-      log "Starting Qs daemon for #{@daemon.name}..."
+      log "Starting Qs daemon for #{@daemon.name}"
 
       $0 = @name
       @pid_file.write
       log "PID: #{@pid_file.pid}"
 
-      ::Signal.trap("TERM"){ @daemon.stop }
-      ::Signal.trap("INT"){ @daemon.halt }
-      ::Signal.trap("USR2") do
-        @daemon.stop
-        @restart = true
-      end
+      @signal_io.setup
+      trap_signals(@signal_io)
 
-      thread = @daemon.start
-      log "#{@daemon.name} daemon started and ready."
-      thread.join
-      run_restart_cmd if self.restart?
-    rescue StandardError => exception
-      log "Error: #{exception.message}"
-      log "#{@daemon.name} daemon never started."
+      start_daemon(@daemon)
+
+      signal = catch(:signal) do
+        wait_for_signals(@signal_io, @daemon)
+      end
+      @signal_io.teardown
+
+      run_restart_cmd(@daemon, @restart_cmd) if signal == 'R'
     ensure
       @pid_file.remove
     end
 
     def daemonize?
-      @daemonize && !@skip_daemonize
-    end
-
-    def restart?
-      @restart
+      @daemonize
     end
 
     private
 
+    def start_daemon(daemon)
+      @daemon.start
+      log "#{@daemon.name} daemon started and ready."
+    rescue StandardError => exception
+      log "#{@daemon.name} daemon never started."
+      raise exception
+    end
+
+    def trap_signals(signal_io)
+      trap_signal('INT'){  signal_io.write('H') }
+      trap_signal('TERM'){ signal_io.write('S') }
+      trap_signal('USR2'){ signal_io.write('R') }
+    end
+
+    def trap_signal(signal, &block)
+      ::Signal.trap(signal, &block)
+    rescue ArgumentError
+      log "'#{signal}' signal not supported"
+    end
+
+    def wait_for_signals(signal_io, daemon)
+      while signal_io.wait do
+        os_signal = signal_io.read
+        handle_signal(os_signal, daemon)
+      end
+    end
+
+    def handle_signal(signal, daemon)
+      log "Got '#{signal}' signal"
+      case signal
+      when 'H'
+        daemon.halt(true)
+      when 'S', 'R'
+        daemon.stop(true)
+      end
+      throw :signal, signal
+    end
+
+    def run_restart_cmd(daemon, restart_cmd)
+      log "Restarting #{daemon.name} daemon"
+      ENV['QS_SKIP_DAEMONIZE'] = 'yes'
+      restart_cmd.run
+    end
+
     def log(message)
       @logger.info "[Qs] #{message}"
-    end
-
-    def run_restart_cmd
-      log "Restarting #{@daemon.name} daemon..."
-      ENV['QS_SKIP_DAEMONIZE'] = 'yes'
-      @restart_cmd.run
-    end
-
-    def default_if_blank(value, default, &block)
-      ignore_if_blank(value, &block) || default
     end
 
     def ignore_if_blank(value, &block)

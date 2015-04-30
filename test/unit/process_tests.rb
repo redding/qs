@@ -18,7 +18,7 @@ class Qs::Process
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @current_env_process_name = ENV['QS_PROCESS_NAME']
+      @current_env_process_name   = ENV['QS_PROCESS_NAME']
       @current_env_skip_daemonize = ENV['QS_SKIP_DAEMONIZE']
       ENV.delete('QS_PROCESS_NAME')
       ENV.delete('QS_SKIP_DAEMONIZE')
@@ -37,20 +37,22 @@ class Qs::Process
     end
     teardown do
       ENV['QS_SKIP_DAEMONIZE'] = @current_env_skip_daemonize
-      ENV['QS_PROCESS_NAME'] = @current_env_process_name
+      ENV['QS_PROCESS_NAME']   = @current_env_process_name
     end
     subject{ @process }
 
-    should have_readers :daemon, :name, :pid_file, :restart_cmd
-    should have_imeths :run, :daemonize?, :restart?
+    should have_readers :daemon, :name
+    should have_readers :pid_file, :signal_io, :restart_cmd
+    should have_imeths :run, :daemonize?
 
     should "know its daemon" do
       assert_equal @daemon_spy, subject.daemon
     end
 
-    should "know its name, pid file and restart cmd" do
+    should "know its name, pid file, signal io and restart cmd" do
       assert_equal "qs-#{@daemon_spy.name}", subject.name
       assert_equal @pid_file_spy, subject.pid_file
+      assert_instance_of Qs::IOPipe, subject.signal_io
       assert_equal @restart_cmd_spy, subject.restart_cmd
     end
 
@@ -90,10 +92,6 @@ class Qs::Process
       assert_true process.daemonize?
     end
 
-    should "not restart by default" do
-      assert_false subject.restart?
-    end
-
   end
 
   class RunSetupTests < InitTests
@@ -103,28 +101,14 @@ class Qs::Process
 
       @current_process_name = $0
 
-      @term_signal_trap_block = nil
-      @term_signal_trap_called = false
-      Assert.stub(::Signal, :trap).with("TERM") do |&block|
-        @term_signal_trap_block = block
-        @term_signal_trap_called = true
-      end
-
-      @int_signal_trap_block = nil
-      @int_signal_trap_called = false
-      Assert.stub(::Signal, :trap).with("INT") do |&block|
-        @int_signal_trap_block = block
-        @int_signal_trap_called = true
-      end
-
-      @usr2_signal_trap_block = nil
-      @usr2_signal_trap_called = false
-      Assert.stub(::Signal, :trap).with("USR2") do |&block|
-        @usr2_signal_trap_block = block
-        @usr2_signal_trap_called = true
+      @signal_traps = []
+      Assert.stub(::Signal, :trap) do |signal, &block|
+        @signal_traps << SignalTrap.new(signal, block)
       end
     end
     teardown do
+      @process.signal_io.write('H')
+      @thread.join if @thread
       $0 = @current_process_name
     end
 
@@ -133,83 +117,164 @@ class Qs::Process
   class RunTests < RunSetupTests
     desc "and run"
     setup do
-      @process.run
+      @thread = Thread.new{ @process.run }
+      @thread.join(0.1)
     end
 
-    should "not have daemonized the process" do
+    should "not daemonize the process" do
       assert_false @daemonize_called
     end
 
-    should "have set the process name" do
+    should "set the process name" do
       assert_equal $0, subject.name
     end
 
-    should "have written the PID file" do
+    should "write its PID file" do
       assert_true @pid_file_spy.write_called
     end
 
-    should "have trapped signals" do
-      assert_true @term_signal_trap_called
-      assert_false @daemon_spy.stop_called
-      @term_signal_trap_block.call
-      assert_true @daemon_spy.stop_called
-
-      assert_true @int_signal_trap_called
-      assert_false @daemon_spy.halt_called
-      @int_signal_trap_block.call
-      assert_true @daemon_spy.halt_called
-
-      @daemon_spy.stop_called = false
-
-      assert_true @usr2_signal_trap_called
-      assert_false subject.restart?
-      @usr2_signal_trap_block.call
-      assert_true @daemon_spy.stop_called
-      assert_true subject.restart?
+    should "trap signals" do
+      assert_equal 3, @signal_traps.size
+      assert_equal ['INT', 'TERM', 'USR2'], @signal_traps.map(&:signal)
     end
 
-    should "have started the daemon" do
+    should "start the daemon" do
       assert_true @daemon_spy.start_called
     end
 
-    should "have joined the daemon thread" do
-      assert_true @daemon_spy.thread.join_called
+    should "sleep its thread waiting for signals" do
+      assert_equal 'sleep', @thread.status
     end
 
     should "not run the restart cmd" do
       assert_false @restart_cmd_spy.run_called
     end
 
-    should "have removed the PID file" do
-      assert_true @pid_file_spy.remove_called
+  end
+
+  class SignalTrapsTests < RunSetupTests
+    desc "signal traps"
+    setup do
+      # setup the io pipe so we can see whats written to it
+      @process.signal_io.setup
+    end
+    teardown do
+      @process.signal_io.teardown
+    end
+
+    should "write the signals to processes signal IO" do
+      @signal_traps.each do |signal_trap|
+        signal_trap.block.call
+        assert_equal signal_trap.signal, subject.signal_io.read
+      end
     end
 
   end
 
   class RunWithDaemonizeTests < RunSetupTests
-    desc "that should daemonize is run"
+    desc "and run when it should daemonize"
     setup do
       Assert.stub(@process, :daemonize?){ true }
-      @process.run
+      @thread = Thread.new{ @process.run }
+      @thread.join(0.1)
     end
 
-    should "have daemonized the process" do
+    should "daemonize the process" do
       assert_true @daemonize_called
     end
 
   end
 
-  class RunAndDaemonPausedTests < RunSetupTests
-    desc "then run and sent a restart signal"
+  class RunAndHaltTests < RunSetupTests
+    desc "and run with a halt signal"
     setup do
-      # mimicing pause being called by a signal, after the thread is joined
-      @daemon_spy.thread.on_join{ @usr2_signal_trap_block.call }
-      @process.run
+      @thread = Thread.new{ @process.run }
+      @process.signal_io.write('H') # send halt signal
+      @thread.join(0.1)
     end
 
-    should "set env vars for restarting and run the restart cmd" do
+    should "halt its daemon" do
+      assert_true @daemon_spy.halt_called
+      assert_equal [true], @daemon_spy.halt_args
+    end
+
+    should "not set the env var to skip daemonize" do
+      assert_equal @current_env_skip_daemonize, ENV['QS_SKIP_DAEMONIZE']
+    end
+
+    should "not run the restart cmd" do
+      assert_false @restart_cmd_spy.run_called
+    end
+
+    should "remove the PID file" do
+      assert_true @pid_file_spy.remove_called
+    end
+
+  end
+
+  class RunAndStopTests < RunSetupTests
+    desc "and run with a stop signal"
+    setup do
+      @thread = Thread.new{ @process.run }
+      @process.signal_io.write('S') # send stop signal
+      @thread.join(0.1)
+    end
+
+    should "stop its daemon" do
+      assert_true @daemon_spy.stop_called
+      assert_equal [true], @daemon_spy.stop_args
+    end
+
+    should "not set the env var to skip daemonize" do
+      assert_equal @current_env_skip_daemonize, ENV['QS_SKIP_DAEMONIZE']
+    end
+
+    should "not run the restart cmd" do
+      assert_false @restart_cmd_spy.run_called
+    end
+
+    should "remove the PID file" do
+      assert_true @pid_file_spy.remove_called
+    end
+
+  end
+
+  class RunAndRestartTests < RunSetupTests
+    desc "and run with a restart signal"
+    setup do
+      @thread = Thread.new{ @process.run }
+      @process.signal_io.write('R') # send restart signal
+      @thread.join(0.1)
+    end
+
+    should "stop its daemon" do
+      assert_true @daemon_spy.stop_called
+      assert_equal [true], @daemon_spy.stop_args
+    end
+
+    should "set the env var to skip daemonize" do
       assert_equal 'yes', ENV['QS_SKIP_DAEMONIZE']
+    end
+
+    should "run the restart cmd" do
       assert_true @restart_cmd_spy.run_called
+    end
+
+  end
+
+  class RunWithInvalidSignalTests < RunSetupTests
+    desc "and run with unsupported signals"
+    setup do
+      # ruby throws an argument error if the OS doesn't support a signal
+      Assert.stub(::Signal, :trap){ raise ArgumentError }
+
+      @thread = Thread.new{ @process.run }
+      @thread.join(0.1)
+    end
+
+    should "start normally" do
+      assert_true @daemon_spy.start_called
+      assert_equal 'sleep', @thread.status
     end
 
   end
@@ -262,7 +327,7 @@ class Qs::Process
   end
 
   class RestartCmdWithPWDEnvNoMatchTests < RestartCmdTests
-    desc "when init with a PWD env variable that doesn't point to ruby working dir"
+    desc "when init with a PWD env variable that's not the ruby working dir"
     setup do
       @restart_cmd = @cmd_class.new
     end
@@ -274,7 +339,7 @@ class Qs::Process
   end
 
   class RestartCmdWithPWDEnvInitTests < RestartCmdTests
-    desc "when init with a PWD env variable that points to the ruby working dir"
+    desc "when init with a PWD env variable that's the ruby working dir"
     setup do
       # make ENV['PWD'] point to the same file as Dir.pwd
       Assert.stub(File, :stat).with(ENV['PWD']){ @ruby_pwd_stat }
@@ -300,6 +365,8 @@ class Qs::Process
 
   end
 
+  SignalTrap = Struct.new(:signal, :block)
+
   class DaemonSpy
     include Qs::Daemon
 
@@ -309,50 +376,31 @@ class Qs::Process
     queue Qs::Queue.new{ name Factory.string }
 
     attr_accessor :start_called, :stop_called, :halt_called
-    attr_reader :start_args
-    attr_reader :thread
+    attr_reader :start_args, :stop_args, :halt_args
 
     def initialize(*args)
       super
+      @start_args   = nil
       @start_called = false
-      @stop_called = false
-      @halt_called = false
-
-      @start_args = nil
-
-      @thread = ThreadSpy.new
+      @stop_args    = nil
+      @stop_called  = false
+      @halt_args    = nil
+      @halt_called  = false
     end
 
     def start(*args)
-      @start_args = args
+      @start_args   = args
       @start_called = true
-      @thread
     end
 
     def stop(*args)
+      @stop_args   = args
       @stop_called = true
     end
 
     def halt(*args)
+      @halt_args   = args
       @halt_called = true
-    end
-  end
-
-  class ThreadSpy
-    attr_reader :join_called, :on_join_proc
-
-    def initialize
-      @join_called = false
-      @on_join_proc = proc{ }
-    end
-
-    def on_join(&block)
-      @on_join_proc = block
-    end
-
-    def join
-      @join_called = true
-      @on_join_proc.call
     end
   end
 
