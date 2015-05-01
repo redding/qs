@@ -488,6 +488,40 @@ module Qs::Daemon
 
   end
 
+  class WorkLoopErrorTests < StartTests
+    desc "with a work loop error"
+    setup do
+      # cause a non-dequeue error
+      Assert.stub(@worker_pool_spy, :worker_available?){ raise RuntimeError }
+
+      # cause the daemon to loop, its sleeping on the original block_dequeue
+      # call that happened before the stub
+      @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
+      @client_spy.append(@redis_item.queue_redis_key, @redis_item.serialized_payload)
+    end
+
+    should "shutdown the worker pool" do
+      assert_true @worker_pool_spy.shutdown_called
+      assert_equal @daemon_class.shutdown_timeout, @worker_pool_spy.shutdown_timeout
+    end
+
+    should "requeue any work left on the pool" do
+      call = @client_spy.calls.last
+      assert_equal :prepend, call.command
+      assert_equal @redis_item.queue_redis_key,    call.args.first
+      assert_equal @redis_item.serialized_payload, call.args.last
+    end
+
+    should "stop the work loop thread" do
+      assert_false @thread.alive?
+    end
+
+    should "not be running" do
+      assert_false subject.running?
+    end
+
+  end
+
   class ConfigurationTests < UnitTests
     include NsOptions::AssertMacros
 
