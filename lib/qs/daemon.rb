@@ -164,7 +164,8 @@ module Qs
 
       def wait_for_available_worker
         if !@worker_pool.worker_available? && @signal.start?
-          @worker_available_io.wait.read
+          @worker_available_io.wait
+          @worker_available_io.read
         end
       end
 

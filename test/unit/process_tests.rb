@@ -13,6 +13,10 @@ class Qs::Process
     end
     subject{ @process_class }
 
+    should "know its wait for signals timeout" do
+      assert_equal 15, WAIT_FOR_SIGNALS_TIMEOUT
+    end
+
   end
 
   class InitTests < UnitTests
@@ -117,8 +121,19 @@ class Qs::Process
   class RunTests < RunSetupTests
     desc "and run"
     setup do
+      @wait_timeout = nil
+      Assert.stub(@process.signal_io, :wait) do |timeout|
+        @wait_timeout = timeout
+        sleep 0.1
+        false
+      end
+
       @thread = Thread.new{ @process.run }
       @thread.join(0.1)
+    end
+    teardown do
+      # manually unstub or the process thread will hang forever
+      Assert.unstub(@process.signal_io, :wait)
     end
 
     should "not daemonize the process" do
@@ -143,6 +158,7 @@ class Qs::Process
     end
 
     should "sleep its thread waiting for signals" do
+      assert_equal WAIT_FOR_SIGNALS_TIMEOUT, @wait_timeout
       assert_equal 'sleep', @thread.status
     end
 
@@ -258,6 +274,30 @@ class Qs::Process
 
     should "run the restart cmd" do
       assert_true @restart_cmd_spy.run_called
+    end
+
+  end
+
+  class RunWithDaemonCrashTests < RunSetupTests
+    desc "and run with the daemon crashing"
+    setup do
+      # lower the time it sleeps so it loops and restarts the daemon quicker
+      Assert.stub(@process.signal_io, :wait) do |timeout|
+        sleep 0.1
+        false
+      end
+
+      @thread = Thread.new{ @process.run }
+      @daemon_spy.start_called = false
+      @thread.join(0.1)
+    end
+    teardown do
+      # manually unstub or the process thread will hang forever
+      Assert.unstub(@process.signal_io, :wait)
+    end
+
+    should "re-start its daemon" do
+      assert_true @daemon_spy.start_called
     end
 
   end
@@ -401,6 +441,10 @@ class Qs::Process
     def halt(*args)
       @halt_args   = args
       @halt_called = true
+    end
+
+    def running?
+      !!@start_called
     end
   end
 
