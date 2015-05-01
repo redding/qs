@@ -55,6 +55,10 @@ module Qs
         self.redis.with{ |c| c.del(redis_key) }
       end
 
+      def ping
+        self.redis.with{ |c| c.ping }
+      end
+
     end
 
   end

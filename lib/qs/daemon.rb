@@ -71,7 +71,11 @@ module Qs
         !!(@work_loop_thread && @work_loop_thread.alive?)
       end
 
+      # * Ping redis to check that it can communicate with redis before running,
+      #   this is friendlier than starting and continously erroring because it
+      #   can't dequeue.
       def start
+        @client.ping
         @signal.set :start
         @work_loop_thread ||= Thread.new{ work_loop }
       end
