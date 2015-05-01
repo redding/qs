@@ -107,7 +107,7 @@ class Qs::Process
       end
     end
     teardown do
-      @process.signal_io.write('H')
+      @process.signal_io.write(HALT)
       @thread.join if @thread
       $0 = @current_process_name
     end
@@ -189,7 +189,7 @@ class Qs::Process
     desc "and run with a halt signal"
     setup do
       @thread = Thread.new{ @process.run }
-      @process.signal_io.write('H') # send halt signal
+      @process.signal_io.write(HALT)
       @thread.join(0.1)
     end
 
@@ -216,7 +216,7 @@ class Qs::Process
     desc "and run with a stop signal"
     setup do
       @thread = Thread.new{ @process.run }
-      @process.signal_io.write('S') # send stop signal
+      @process.signal_io.write(STOP)
       @thread.join(0.1)
     end
 
@@ -243,7 +243,7 @@ class Qs::Process
     desc "and run with a restart signal"
     setup do
       @thread = Thread.new{ @process.run }
-      @process.signal_io.write('R') # send restart signal
+      @process.signal_io.write(RESTART)
       @thread.join(0.1)
     end
 

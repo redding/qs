@@ -5,6 +5,10 @@ module Qs
 
   class Process
 
+    HALT    = 'H'.freeze
+    STOP    = 'S'.freeze
+    RESTART = 'R'.freeze
+
     attr_reader :daemon, :name
     attr_reader :pid_file, :signal_io, :restart_cmd
 
@@ -41,7 +45,7 @@ module Qs
       end
       @signal_io.teardown
 
-      run_restart_cmd(@daemon, @restart_cmd) if signal == 'R'
+      run_restart_cmd(@daemon, @restart_cmd) if signal == RESTART
     ensure
       @pid_file.remove
     end
@@ -61,9 +65,9 @@ module Qs
     end
 
     def trap_signals(signal_io)
-      trap_signal('INT'){  signal_io.write('H') }
-      trap_signal('TERM'){ signal_io.write('S') }
-      trap_signal('USR2'){ signal_io.write('R') }
+      trap_signal('INT'){  signal_io.write(HALT) }
+      trap_signal('TERM'){ signal_io.write(STOP) }
+      trap_signal('USR2'){ signal_io.write(RESTART) }
     end
 
     def trap_signal(signal, &block)
@@ -82,9 +86,9 @@ module Qs
     def handle_signal(signal, daemon)
       log "Got '#{signal}' signal"
       case signal
-      when 'H'
+      when HALT
         daemon.halt(true)
-      when 'S', 'R'
+      when STOP, RESTART
         daemon.stop(true)
       end
       throw :signal, signal
