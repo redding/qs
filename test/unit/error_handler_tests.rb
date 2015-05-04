@@ -11,8 +11,7 @@ class Qs::ErrorHandler
     setup do
       @exception       = Factory.exception
       @daemon_data     = Qs::DaemonData.new
-      @queue_name      = Factory.string
-      @queue_redis_key = Qs::Queue::RedisKey.new(@queue_name)
+      @queue_redis_key = Qs::Queue::RedisKey.new(Factory.string)
       @context_hash    = {
         :daemon_data        => @daemon_data,
         :queue_redis_key    => @queue_redis_key,
@@ -27,20 +26,20 @@ class Qs::ErrorHandler
 
   end
 
-  class InitTests < UnitTests
+  class InitSetupTests < UnitTests
     desc "when init"
     setup do
-      @call_count = 0
-      @first_called_at = nil
-      @second_called_at = nil
-      @args_passed_to_error_proc = nil
-      first_error_proc = proc do |*args|
-        @args_passed_to_error_proc = args
-        @first_called_at = (@call_count += 1)
-      end
-      second_error_proc = proc{ @second_called_at = (@call_count += 1) }
-      Assert.stub(@daemon_data, :error_procs){ [first_error_proc, second_error_proc] }
+      # always make sure there are multiple error procs or tests can be false
+      # positives
+      @error_proc_spies = (1..(Factory.integer(3) + 1)).map{ ErrorProcSpy.new }
+      Assert.stub(@daemon_data, :error_procs){ @error_proc_spies }
+    end
 
+  end
+
+  class InitTests < InitSetupTests
+    desc "when init"
+    setup do
       @handler = @handler_class.new(@exception, @context_hash)
     end
     subject{ @handler }
@@ -55,7 +54,7 @@ class Qs::ErrorHandler
     end
 
     should "know its error procs" do
-      assert_equal @daemon_data.error_procs.reverse, subject.error_procs
+      assert_equal @error_proc_spies.reverse, subject.error_procs
     end
 
   end
@@ -66,66 +65,36 @@ class Qs::ErrorHandler
       @handler.run
     end
 
-    should "pass its exception and context to the error procs" do
-      assert_not_nil @args_passed_to_error_proc
-      assert_includes subject.exception, @args_passed_to_error_proc
-      assert_includes subject.context,   @args_passed_to_error_proc
-    end
-
-    should "call each of its error procs" do
-      assert_equal 1, @second_called_at
-      assert_equal 2, @first_called_at
+    should "call each of its procs" do
+      subject.error_procs.each_with_index do |spy, index|
+        assert_true spy.called
+        assert_equal subject.exception, spy.exception
+        assert_equal subject.context,   spy.context
+      end
     end
 
   end
 
-  class RunAndErrorProcThrowsExceptionTests < UnitTests
-    desc "run with an error proc that throws an exception"
+  class RunWithErrorProcExceptionsTests < InitSetupTests
+    desc "and run with error procs that throw exceptions"
     setup do
-      @proc_exception = Factory.exception
-      error_proc = proc{ raise @proc_exception }
-      Assert.stub(@daemon_data, :error_procs){ [error_proc] }
+      @proc_exceptions = @error_proc_spies.reverse.map do |spy|
+        exception = Factory.exception(RuntimeError, @error_proc_spies.index(spy).to_s)
+        spy.raise_exception = exception
+        exception
+      end
 
       @handler = @handler_class.new(@exception, @context_hash).tap(&:run)
     end
     subject{ @handler }
 
-    should "set its exception to the exception thrown by the error proc" do
-      assert_equal @proc_exception, subject.exception
+    should "pass the previously raised exception to the next proc" do
+      exp = [@exception] + @proc_exceptions[0..-2]
+      assert_equal exp, subject.error_procs.map(&:exception)
     end
 
-  end
-
-  class RunWithMultipleErrorProcsThatThrowExceptionsTests < UnitTests
-    desc "run with multiple error procs that throw an exception"
-    setup do
-      @first_caught_exception  = nil
-      @second_caught_exception = nil
-      @third_caught_exception  = nil
-
-      @third_proc_exception = Factory.exception
-      third_proc = proc do |exception, context|
-        @third_caught_exception = exception
-        raise @third_proc_exception
-      end
-
-      @second_proc_exception = Factory.exception
-      second_proc = proc do |exception, context|
-        @second_caught_exception = exception
-        raise @second_proc_exception
-      end
-
-      first_proc = proc{ |exception, context| @first_caught_exception = exception }
-
-      Assert.stub(@daemon_data, :error_procs){ [first_proc, second_proc, third_proc] }
-      @handler = @handler_class.new(@exception, @context_hash).tap(&:run)
-    end
-    subject{ @handler }
-
-    should "call each proc, passing the previously raised exception to the next" do
-      assert_equal @exception,             @third_caught_exception
-      assert_equal @third_proc_exception,  @second_caught_exception
-      assert_equal @second_proc_exception, @first_caught_exception
+    should "set its exception to the last exception thrown by the procs" do
+      assert_equal @proc_exceptions.last, subject.exception
     end
 
   end
@@ -158,6 +127,23 @@ class Qs::ErrorHandler
       assert_not_equal exp, subject
     end
 
+  end
+
+  class ErrorProcSpy
+    attr_reader :called, :exception, :context
+    attr_accessor :raise_exception
+
+    def initialize
+      @called = false
+    end
+
+    def call(exception, context)
+      @called    = true
+      @exception = exception
+      @context   = context
+
+      raise self.raise_exception if self.raise_exception
+    end
   end
 
 end
