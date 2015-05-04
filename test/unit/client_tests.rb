@@ -127,6 +127,13 @@ module Qs::Client
       assert_equal [@queue_redis_key], call.args
     end
 
+    should "ping redis using `ping`" do
+      subject.ping
+
+      call = @connection_spy.redis_calls.last
+      assert_equal :ping, call.command
+    end
+
   end
 
   class QsClientTests < UnitTests

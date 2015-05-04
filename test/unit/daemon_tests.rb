@@ -218,6 +218,11 @@ module Qs::Daemon
       @thread.join 0.1
     end
 
+    should "ping redis" do
+      call = @client_spy.calls.first
+      assert_equal :ping, call.command
+    end
+
     should "return the thread that is running the daemon" do
       assert_instance_of Thread, @thread
       assert_true @thread.alive?
@@ -228,8 +233,8 @@ module Qs::Daemon
     end
 
     should "clear the signals list in redis" do
-      call = @client_spy.calls.first
-      assert_equal :clear, call.command
+      call = @client_spy.calls.find{ |c| c.command == :clear }
+      assert_not_nil call
       assert_equal [subject.signals_redis_key], call.args
     end
 
@@ -708,6 +713,10 @@ module Qs::Daemon
 
     def clear(*args)
       @calls << Call.new(:clear, args)
+    end
+
+    def ping
+      @calls << Call.new(:ping)
     end
 
     Call = Struct.new(:command, :args)
