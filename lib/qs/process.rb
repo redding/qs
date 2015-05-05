@@ -9,6 +9,8 @@ module Qs
     STOP    = 'S'.freeze
     RESTART = 'R'.freeze
 
+    WAIT_FOR_SIGNALS_TIMEOUT = 15
+
     attr_reader :daemon, :name
     attr_reader :pid_file, :signal_io, :restart_cmd
 
@@ -77,9 +79,14 @@ module Qs
     end
 
     def wait_for_signals(signal_io, daemon)
-      while signal_io.wait do
-        os_signal = signal_io.read
-        handle_signal(os_signal, daemon)
+      loop do
+        ready = signal_io.wait(WAIT_FOR_SIGNALS_TIMEOUT)
+        handle_signal(signal_io.read, daemon) if ready
+
+        if !daemon.running?
+          log "Daemon crashed, restarting"
+          start_daemon(daemon)
+        end
       end
     end
 

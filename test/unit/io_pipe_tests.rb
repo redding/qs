@@ -8,6 +8,14 @@ class Qs::IOPipe
   class UnitTests < Assert::Context
     desc "Qs::IOPipe"
     setup do
+      # mimic how IO.select responds
+      @io_select_response    = Factory.boolean ? [[NULL], [], []] : nil
+      @io_select_called_with = nil
+      Assert.stub(IO, :select) do |*args|
+        @io_select_called_with = args
+        @io_select_response
+      end
+
       @io_pipe = Qs::IOPipe.new
     end
     subject{ @io_pipe }
@@ -60,15 +68,15 @@ class Qs::IOPipe
     should "be able to wait until there is something to read" do
       subject.setup
 
-      result = nil
-      thread = Thread.new{ result = subject.wait }
-      thread.join(0.1)
-      assert_equal 'sleep', thread.status
+      result = subject.wait
+      exp = [[subject.reader], nil, nil, nil]
+      assert_equal exp, @io_select_called_with
+      assert_equal !!@io_select_response, result
 
-      subject.write(Factory.string)
-      thread.join
-      assert_false thread.status
-      assert_equal subject, result
+      timeout = Factory.integer
+      subject.wait(timeout)
+      exp = [[subject.reader], nil, nil, timeout]
+      assert_equal exp, @io_select_called_with
     end
 
   end

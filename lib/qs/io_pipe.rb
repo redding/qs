@@ -31,9 +31,8 @@ module Qs
       @writer.write_nonblock(value[0, NUMBER_OF_BYTES])
     end
 
-    def wait
-      ::IO.select([@reader])
-      self
+    def wait(timeout = nil)
+      !!::IO.select([@reader], nil, nil, timeout)
     end
 
   end
