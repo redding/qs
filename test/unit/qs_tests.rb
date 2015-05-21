@@ -24,6 +24,7 @@ module Qs
     should have_imeths :enqueue, :push
     should have_imeths :serialize, :deserialize
     should have_imeths :client, :redis, :redis_config
+    should have_imeths :dispatcher_queue, :dispatcher_job_name
 
     should "know its config" do
       assert_instance_of Config, subject.config
@@ -73,6 +74,14 @@ module Qs
       assert_equal expected, subject.config.redis.url
     end
 
+    should "know its dispatcher queue and dispatcher job name" do
+      assert_instance_of Qs::Queue, subject.dispatcher_queue
+      exp = subject.config.dispatcher_name
+      assert_equal exp, subject.dispatcher_queue.name
+      exp = subject.config.dispatcher_job_name
+      assert_equal exp, subject.dispatcher_job_name
+    end
+
     should "build a client" do
       assert_equal @client_spy,          subject.client
       assert_equal @client_spy.redis,    subject.redis
@@ -113,10 +122,12 @@ module Qs
       assert_equal value.to_i, result
     end
 
-    should "not reset its client or redis connection when init again" do
+    should "not reset its attributes when init again" do
+      queue  = subject.dispatcher_queue
       client = subject.client
       redis  = subject.redis
       subject.init
+      assert_same queue,  subject.dispatcher_queue
       assert_same client, subject.client
       assert_same redis,  subject.redis
     end
@@ -124,6 +135,7 @@ module Qs
     should "reset itself using `reset!`" do
       subject.reset!
       assert_nil subject.config.redis.url
+      assert_nil subject.dispatcher_queue
       assert_nil subject.client
       assert_nil subject.redis
       assert_raises(NoMethodError){ subject.serialize(Factory.integer) }
@@ -141,8 +153,14 @@ module Qs
     end
     subject{ @config }
 
+    should have_options :dispatcher_name, :dispatcher_job_name
     should have_options :serializer, :deserializer, :timeout
     should have_namespace :redis
+
+    should "know its default dispatcher name and job name" do
+      assert_equal 'dispatcher',     subject.dispatcher_name
+      assert_equal 'dispatch_event', subject.dispatcher_job_name
+    end
 
     should "know its default serializer/deserializer" do
       payload = { Factory.string => Factory.string }

@@ -19,6 +19,11 @@ module Qs
       self.config.redis.db
     )
 
+    @dispatcher_queue ||= begin
+      dispatcher_name = self.config.dispatcher_name
+      Queue.new{ name(dispatcher_name) }
+    end
+
     @serializer   ||= self.config.serializer
     @deserializer ||= self.config.deserializer
     @client       ||= Client.new(self.redis_config)
@@ -28,10 +33,11 @@ module Qs
 
   def self.reset!
     self.config.reset
-    @serializer   = nil
-    @deserializer = nil
-    @client       = nil
-    @redis        = nil
+    @dispatcher_queue = nil
+    @serializer       = nil
+    @deserializer     = nil
+    @client           = nil
+    @redis            = nil
     true
   end
 
@@ -63,8 +69,19 @@ module Qs
     self.config.redis.to_hash
   end
 
+  def self.dispatcher_queue
+    @dispatcher_queue
+  end
+
+  def self.dispatcher_job_name
+    self.config.dispatcher_job_name
+  end
+
   class Config
     include NsOptions::Proxy
+
+    option :dispatcher_name,     String, :default => 'dispatcher'
+    option :dispatcher_job_name, String, :default => 'dispatch_event'
 
     option :serializer,   Proc, :default => proc{ |p| ::JSON.dump(p) }
     option :deserializer, Proc, :default => proc{ |p| ::JSON.load(p) }
