@@ -181,7 +181,7 @@ module Qs::JobHandler
     should "have a custom inspect" do
       reference = '0x0%x' % (subject.object_id << 1)
       expected = "#<#{subject.class}:#{reference} " \
-                 "@job=#{@runner.job.inspect}>"
+                 "@job=#{@handler.public_job.inspect}>"
       assert_equal expected, subject.inspect
     end
 
@@ -220,17 +220,9 @@ module Qs::JobHandler
       @run_call_order = next_call_order
     end
 
-    def public_job
-      job
-    end
-
-    def public_params
-      params
-    end
-
-    def public_logger
-      logger
-    end
+    def public_job;    job;    end
+    def public_params; params; end
+    def public_logger; logger; end
 
     private
 
@@ -244,7 +236,7 @@ module Qs::JobHandler
     attr_accessor :job, :params, :logger
 
     def initialize
-      @job = Factory.string
+      @job    = Factory.job
       @params = Factory.string
       @logger = Factory.string
     end
