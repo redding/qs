@@ -3,7 +3,6 @@ require 'qs'
 
 require 'hella-redis/connection_spy'
 require 'ns-options/assert_macros'
-require 'qs/job'
 require 'qs/queue'
 
 module Qs
@@ -21,10 +20,11 @@ module Qs
     subject{ @module }
 
     should have_imeths :config, :configure, :init, :reset!
-    should have_imeths :enqueue, :push
+    should have_imeths :enqueue, :publish, :push
     should have_imeths :serialize, :deserialize
     should have_imeths :client, :redis, :redis_config
     should have_imeths :dispatcher_queue, :dispatcher_job_name
+    should have_imeths :published_events
 
     should "know its config" do
       assert_instance_of Config, subject.config
@@ -100,6 +100,18 @@ module Qs
       assert_equal job_params, call.job_params
     end
 
+    should "call publish on its client using `publish`" do
+      event_channel = Factory.string
+      event_name    = Factory.string
+      event_params  = { Factory.string => Factory.string }
+      subject.publish(event_channel, event_name, event_params)
+
+      call = @client_spy.publish_calls.last
+      assert_equal event_channel, call.event_channel
+      assert_equal event_name,    call.event_name
+      assert_equal event_params,  call.event_params
+    end
+
     should "call push on its client using `push`" do
       queue_name = Factory.string
       payload    = { Factory.string => Factory.string }
@@ -120,6 +132,13 @@ module Qs
       value = Factory.integer.to_s
       result = subject.deserialize(value)
       assert_equal value.to_i, result
+    end
+
+    should "return the dispatcher queue published events using `published_events`" do
+      queue = subject.dispatcher_queue
+      published_events = Factory.integer(3).times.map{ Factory.string }
+      Assert.stub(queue, :published_events){ published_events }
+      assert_equal queue.published_events, subject.published_events
     end
 
     should "not reset its attributes when init again" do
@@ -211,12 +230,13 @@ module Qs
 
   class ClientSpy
     attr_reader :redis_config, :redis
-    attr_reader :enqueue_calls, :push_calls
+    attr_reader :enqueue_calls, :publish_calls, :push_calls
 
     def initialize(redis_confg)
       @redis_config  = redis_confg
       @redis         = Factory.string
       @enqueue_calls = []
+      @publish_calls = []
       @push_calls    = []
     end
 
@@ -224,11 +244,16 @@ module Qs
       @enqueue_calls << EnqueueCall.new(queue, job_name, job_params)
     end
 
+    def publish(channel, name, params)
+      @publish_calls << PublishCall.new(channel, name, params)
+    end
+
     def push(queue_name, payload)
       @push_calls << PushCall.new(queue_name, payload)
     end
 
     EnqueueCall = Struct.new(:queue, :job_name, :job_params)
+    PublishCall = Struct.new(:event_channel, :event_name, :event_params)
     PushCall    = Struct.new(:queue_name, :payload)
   end
 

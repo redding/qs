@@ -45,6 +45,10 @@ module Qs
     @client.enqueue(queue, job_name, params)
   end
 
+  def self.publish(channel, name, params = nil)
+    @client.publish(channel, name, params)
+  end
+
   def self.push(queue_name, payload)
     @client.push(queue_name, payload)
   end
@@ -75,6 +79,10 @@ module Qs
 
   def self.dispatcher_job_name
     self.config.dispatcher_job_name
+  end
+
+  def self.published_events
+    self.dispatcher_queue.published_events
   end
 
   class Config

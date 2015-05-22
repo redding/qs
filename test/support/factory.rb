@@ -14,18 +14,43 @@ module Factory
   end
 
   def self.job(params = nil)
-    name       = Factory.string
-    params     = { Factory.string => Factory.string }
-    created_at = Factory.time
-    Qs::Job.new(name, params, :created_at => created_at)
+    params ||= {}
+    params[:name]       ||= Factory.string
+    params[:params]     ||= { Factory.string => Factory.string }
+    params[:created_at] ||= Factory.time
+    Qs::Job.new(
+      params.delete(:name),
+      params.delete(:params),
+      params
+    )
+  end
+
+  def self.dispatch_job(params = nil)
+    params ||= {}
+    params[:event_channel] ||= Factory.string
+    params[:event_name]    ||= Factory.string
+    params[:event_params]  ||= { Factory.string => Factory.string }
+    params[:created_at]    ||= Factory.time
+    Qs::DispatchJob.new(
+      params.delete(:event_channel),
+      params.delete(:event_name),
+      params.delete(:event_params),
+      params
+    )
   end
 
   def self.event_job(params = nil)
-    channel      = Factory.string
-    event        = Factory.string
-    params       = { Factory.string => Factory.string }
-    published_at = Factory.time
-    Qs::Event.build(channel, event, params, :published_at => published_at).job
+    params ||= {}
+    params[:channel]      ||= Factory.string
+    params[:name]         ||= Factory.string
+    params[:params]       ||= { Factory.string => Factory.string }
+    params[:published_at] ||= Factory.time
+    Qs::Event.build(
+      params.delete(:channel),
+      params.delete(:name),
+      params.delete(:params),
+      params
+    ).job
   end
 
 end

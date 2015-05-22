@@ -1,5 +1,6 @@
 require 'hella-redis'
 require 'qs'
+require 'qs/dispatch_job'
 require 'qs/job'
 require 'qs/queue'
 
@@ -33,6 +34,12 @@ module Qs
         job = Qs::Job.new(job_name, params || {})
         enqueue!(queue, job)
         job
+      end
+
+      def publish(channel, name, params = nil)
+        dispatch_job = DispatchJob.new(channel, name, params || {})
+        enqueue!(Qs.dispatcher_queue, dispatch_job)
+        dispatch_job.event
       end
 
       def push(queue_name, payload)
