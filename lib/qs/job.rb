@@ -2,22 +2,37 @@ module Qs
 
   class Job
 
+    PAYLOAD_TYPE = 'job'
+
     def self.parse(payload)
       created_at = Time.at(payload['created_at'].to_i)
-      self.new(payload['name'], payload['params'], created_at)
+      self.new(payload['name'], payload['params'], {
+        :type       => payload['type'],
+        :created_at => created_at
+      })
     end
 
-    attr_reader :name, :params, :created_at
+    attr_reader :payload_type, :name, :params, :created_at
 
-    def initialize(name, params, created_at = nil)
+    def initialize(name, params, options = nil)
+      options ||= {}
+      options[:type]       = PAYLOAD_TYPE unless options.key?(:type)
+      options[:created_at] = Time.now     unless options.key?(:created_at)
+
       validate!(name, params)
-      @name       = name
-      @params     = params
-      @created_at = created_at || Time.now
+      @payload_type = options[:type]
+      @name         = name
+      @params       = params
+      @created_at   = options[:created_at]
+    end
+
+    def route_name
+      @route_name ||= RouteName.new(self.payload_type, self.name)
     end
 
     def to_payload
-      { 'name'       => self.name.to_s,
+      { 'type'       => self.payload_type.to_s,
+        'name'       => self.name.to_s,
         'params'     => StringifyParams.new(self.params),
         'created_at' => self.created_at.to_i
       }
@@ -48,6 +63,12 @@ module Qs
         "The job's params are not valid."
       end
       raise(BadJobError, problem) if problem
+    end
+
+    module RouteName
+      def self.new(payload_type, name)
+        "#{payload_type}|#{name}"
+      end
     end
 
     module StringifyParams

@@ -11,7 +11,9 @@ module Qs
         'event_name'    => name,
         'event_params'  => params
       }
-      self.new(Qs::Job.new(job_name, job_params, published_at))
+      self.new(Qs::Job.new(job_name, job_params, {
+        :created_at => published_at
+      }))
     end
 
     attr_reader :job

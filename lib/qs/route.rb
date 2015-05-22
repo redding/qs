@@ -6,8 +6,8 @@ module Qs
 
     attr_reader :name, :handler_class_name, :handler_class
 
-    def initialize(name, handler_class_name)
-      @name = name.to_s
+    def initialize(job_route_name, handler_class_name)
+      @name = job_route_name.to_s
       @handler_class_name = handler_class_name
       @handler_class = nil
     end

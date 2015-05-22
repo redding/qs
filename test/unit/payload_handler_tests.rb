@@ -20,12 +20,12 @@ class Qs::PayloadHandler
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @route_spy = RouteSpy.new
+      @job = Factory.job
+      @route_spy = RouteSpy.new(@job.route_name)
       @daemon_data = Qs::DaemonData.new({
         :logger => Qs::NullLogger.new,
         :routes => [@route_spy]
       })
-      @job = Qs::Job.new(@route_spy.name, Factory.string => Factory.string)
       serialized_payload = Qs.serialize(@job.to_payload)
       @redis_item = Qs::RedisItem.new(Factory.string, serialized_payload)
 
@@ -214,8 +214,8 @@ class Qs::PayloadHandler
     attr_reader :job_passed_to_run, :daemon_data_passed_to_run
     attr_reader :run_called
 
-    def initialize
-      @name = Factory.string
+    def initialize(job_route_name)
+      @name = job_route_name
       @job_passed_to_run = nil
       @daemon_data_passed_to_run = nil
       @run_called = false
