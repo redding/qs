@@ -4,7 +4,10 @@ module Qs
 
   class Event
 
-    def self.build(channel, name, params, published_at = nil)
+    PAYLOAD_TYPE = 'event'
+
+    def self.build(channel, name, params, options = nil)
+      options ||= {}
       job_name   = Event::JobName.new(channel, name)
       job_params = {
         'event_channel' => channel,
@@ -12,7 +15,8 @@ module Qs
         'event_params'  => params
       }
       self.new(Qs::Job.new(job_name, job_params, {
-        :created_at => published_at
+        :type       => PAYLOAD_TYPE,
+        :created_at => options[:published_at]
       }))
     end
 

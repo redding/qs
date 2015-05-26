@@ -25,7 +25,7 @@ module Factory
     event        = Factory.string
     params       = { Factory.string => Factory.string }
     published_at = Factory.time
-    Qs::Event.build(channel, event, params, published_at).job
+    Qs::Event.build(channel, event, params, :published_at => published_at).job
   end
 
 end

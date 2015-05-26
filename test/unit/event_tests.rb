@@ -19,11 +19,18 @@ class Qs::Event
 
     should have_imeths :build
 
+    should "know its payload type" do
+      assert_equal 'event', PAYLOAD_TYPE
+    end
+
     should "build an event from args" do
-      event = subject.build(@channel, @name, @params, @published_at)
+      event = subject.build(@channel, @name, @params, {
+        :published_at => @published_at
+      })
       job = event.job
 
       assert_instance_of Qs::Job, job
+      assert_equal PAYLOAD_TYPE, job.payload_type
       assert_equal Qs::Event::JobName.new(@channel, @name), job.name
       exp = {
         'event_channel' => @channel,
