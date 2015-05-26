@@ -33,7 +33,8 @@ module Qs
         handler_name = "#{self.job_handler_ns}::#{handler_name}"
       end
 
-      @routes.push(Qs::Route.new(name, handler_name))
+      route_name = Qs::Job::RouteName.new(Qs::Job::PAYLOAD_TYPE, name)
+      @routes.push(Qs::Route.new(route_name, handler_name))
     end
 
     def enqueue(job_name, params = nil)

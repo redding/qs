@@ -8,9 +8,7 @@ class Qs::Queue
   class UnitTests < Assert::Context
     desc "Qs::Queue"
     setup do
-      @queue = Qs::Queue.new do
-        name Factory.string
-      end
+      @queue = Qs::Queue.new{ name Factory.string }
     end
     subject{ @queue }
 
@@ -56,7 +54,8 @@ class Qs::Queue
 
       route = subject.routes.last
       assert_instance_of Qs::Route, route
-      assert_equal job_name, route.name
+      exp = Qs::Job::RouteName.new(Qs::Job::PAYLOAD_TYPE, job_name)
+      assert_equal exp, route.name
       assert_equal handler_name, route.handler_class_name
     end
 

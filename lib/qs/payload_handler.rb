@@ -38,7 +38,7 @@ module Qs
       log_job(job)
       redis_item.job = job
 
-      route = daemon_data.route_for(job.name)
+      route = daemon_data.route_for(job.route_name)
       log_handler_class(route.handler_class)
       redis_item.handler_class = route.handler_class
 

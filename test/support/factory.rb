@@ -17,7 +17,7 @@ module Factory
     name       = Factory.string
     params     = { Factory.string => Factory.string }
     created_at = Factory.time
-    Qs::Job.new(name, params, created_at)
+    Qs::Job.new(name, params, :created_at => created_at)
   end
 
   def self.event_job(params = nil)

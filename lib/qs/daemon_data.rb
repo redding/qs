@@ -29,8 +29,8 @@ module Qs
       @routes           = build_routes(args[:routes] || [])
     end
 
-    def route_for(name)
-      @routes[name] || raise(NotFoundError, "no service named '#{name}'")
+    def route_for(route_name)
+      @routes[route_name] || raise(NotFoundError, "no job named '#{route_name}'")
     end
 
     private

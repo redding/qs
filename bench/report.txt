@@ -5,7 +5,7 @@ Adding jobs
 Running jobs
 ....................................................................................................
 
-Adding 10000 Jobs Time:   1.4031s
-Running 10000 Jobs Time: 11.4099s
+Adding 10000 Jobs Time:   1.4578s
+Running 10000 Jobs Time: 11.5084s
 
 Done running benchmark report
