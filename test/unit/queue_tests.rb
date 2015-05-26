@@ -13,7 +13,9 @@ class Qs::Queue
     subject{ @queue }
 
     should have_readers :routes, :enqueued_jobs
-    should have_imeths :name, :redis_key, :job_handler_ns, :job
+    should have_imeths :name, :redis_key
+    should have_imeths :job_handler_ns, :job
+    should have_imeths :event_handler_ns, :event
     should have_imeths :enqueue, :add
     should have_imeths :published_events, :reset!
 
@@ -47,8 +49,18 @@ class Qs::Queue
       assert_equal namespace, subject.job_handler_ns
     end
 
-    should "allow adding routes using `job`" do
-      job_name = Factory.string
+    should "not have an event handler ns by default" do
+      assert_nil subject.event_handler_ns
+    end
+
+    should "allow setting its event handler ns" do
+      namespace = Factory.string
+      subject.event_handler_ns namespace
+      assert_equal namespace, subject.event_handler_ns
+    end
+
+    should "allow adding job routes using `job`" do
+      job_name     = Factory.string
       handler_name = Factory.string
       subject.job job_name, handler_name
 
@@ -59,17 +71,70 @@ class Qs::Queue
       assert_equal handler_name, route.handler_class_name
     end
 
-    should "use its job handler ns when adding routes" do
+    should "use its job handler ns when adding job routes" do
       namespace = Factory.string
       subject.job_handler_ns namespace
 
-      job_name = Factory.string
+      job_name     = Factory.string
       handler_name = Factory.string
       subject.job job_name, handler_name
 
       route = subject.routes.last
-      expected = "#{namespace}::#{handler_name}"
-      assert_equal expected, route.handler_class_name
+      exp = "#{namespace}::#{handler_name}"
+      assert_equal exp, route.handler_class_name
+    end
+
+    should "not use its job handler ns with a top-level handler name" do
+      namespace = Factory.string
+      subject.job_handler_ns namespace
+
+      job_name     = Factory.string
+      handler_name = "::#{Factory.string}"
+      subject.job job_name, handler_name
+
+      route = subject.routes.last
+      assert_equal handler_name, route.handler_class_name
+    end
+
+    should "allow adding event routes using `event`" do
+      event_channel = Factory.string
+      event_name    = Factory.string
+      handler_name  = Factory.string
+      subject.event event_channel, event_name, handler_name
+
+      route = subject.routes.last
+      assert_instance_of Qs::Route, route
+      job_name = Qs::Event::JobName.new(event_channel, event_name)
+      exp = Qs::Job::RouteName.new(Qs::Event::PAYLOAD_TYPE, job_name)
+      assert_equal exp, route.name
+      assert_equal handler_name, route.handler_class_name
+    end
+
+    should "use its event handler ns when adding event routes" do
+      namespace = Factory.string
+      subject.event_handler_ns namespace
+
+      event_channel = Factory.string
+      event_name    = Factory.string
+      handler_name  = Factory.string
+      subject.event event_channel, event_name, handler_name
+
+      route = subject.routes.last
+      exp = "#{namespace}::#{handler_name}"
+      assert_equal exp, route.handler_class_name
+    end
+
+    should "not use its event handler ns with a top-level handler name" do
+      namespace = Factory.string
+      subject.event_handler_ns namespace
+
+      event_channel = Factory.string
+      event_name    = Factory.string
+      handler_name  = "::#{Factory.string}"
+      subject.event event_channel, event_name, handler_name
+
+      route = subject.routes.last
+      assert_equal handler_name, route.handler_class_name
     end
 
     should "return the enqueued jobs events using `published_events`" do
@@ -90,7 +155,8 @@ class Qs::Queue
       reference = '0x0%x' % (subject.object_id << 1)
       expected = "#<#{subject.class}:#{reference} " \
                    "@name=#{subject.name.inspect} " \
-                   "@job_handler_ns=#{subject.job_handler_ns.inspect}>"
+                   "@job_handler_ns=#{subject.job_handler_ns.inspect} " \
+                   "@event_handler_ns=#{subject.event_handler_ns.inspect}>"
       assert_equal expected, subject.inspect
     end
 
