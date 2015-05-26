@@ -9,12 +9,13 @@ module Qs
 
     def initialize(handler_class, args = nil)
       @handler_class = handler_class
-      @handler = @handler_class.new(self)
 
       a = args || {}
       @job    = a[:job]
       @params = a[:params] || {}
       @logger = a[:logger] || Qs::NullLogger.new
+
+      @handler = @handler_class.new(self)
     end
 
     def run

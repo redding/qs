@@ -1,15 +1,16 @@
 require 'assert'
-require 'qs/test_runner'
+require 'qs/job_test_runner'
 
 require 'qs'
+require 'qs/event'
 
-class Qs::TestRunner
+class Qs::JobTestRunner
 
   class UnitTests < Assert::Context
-    desc "Qs::TestRunner"
+    desc "Qs::JobTestRunner"
     setup do
       Qs.init
-      @runner_class = Qs::TestRunner
+      @runner_class = Qs::JobTestRunner
     end
     teardown do
       Qs.reset!
@@ -33,7 +34,7 @@ class Qs::TestRunner
         :flag   => Factory.boolean
       }
       @original_args = @args.dup
-      @runner = @runner_class.new(@handler_class, @args)
+      @runner  = @runner_class.new(@handler_class, @args)
       @handler = @runner.handler
     end
     subject{ @runner }
@@ -106,6 +107,78 @@ class Qs::TestRunner
 
   end
 
+  class EventTestRunnerTests < UnitTests
+    desc "EventTestRunner"
+    setup do
+      @runner_class = Qs::EventTestRunner
+    end
+    subject{ @runner_class }
+
+    should "be a job test runner" do
+      assert_true subject < Qs::JobTestRunner
+    end
+
+  end
+
+  class EventTestRunnerInitTests < EventTestRunnerTests
+    desc "when init"
+    setup do
+      @handler_class = TestEventHandler
+      @args = {
+        :event_channel      => Factory.string,
+        :event_name         => Factory.string,
+        :params             => { Factory.string => Factory.string },
+        :event_published_at => Factory.string
+      }
+      @original_args = @args.dup
+      @runner = @runner_class.new(@handler_class, @args)
+    end
+    subject{ @runner }
+
+    should "know its job and params" do
+      exp_job = Qs::Event.build(
+        @args[:event_channel],
+        @args[:event_name],
+        @args[:params],
+        @args[:event_published_at]
+      ).job
+      assert_equal exp_job,        subject.job
+      assert_equal exp_job.params, subject.params
+    end
+
+    should "not alter the args passed to it" do
+      assert_equal @original_args, @args
+    end
+
+    should "allow passing event params instead of params" do
+      @args[:event_params] = @args[:params]
+      @args.delete(:params)
+      runner = @runner_class.new(@handler_class, @args)
+
+      exp_job = Qs::Event.build(
+        @args[:event_channel],
+        @args[:event_name],
+        @args[:event_params],
+        { :published_at => @args[:event_published_at] }
+      ).job
+      assert_equal exp_job,        runner.job
+      assert_equal exp_job.params, runner.params
+    end
+
+    should "default its event channel, name and params" do
+      @args.delete(:event_channel)
+      @args.delete(:event_name)
+      @args.delete(:params)
+      runner = nil
+      assert_nothing_raised{ runner = @runner_class.new(@handler_class, @args) }
+      handler = runner.handler
+      assert_not_nil handler.event.channel
+      assert_not_nil handler.event.name
+      assert_equal({}, handler.event.params)
+    end
+
+  end
+
   class TestJobHandler
     include Qs::JobHandler
 
@@ -123,6 +196,12 @@ class Qs::TestRunner
     def run!
       @run_called = true
     end
+  end
+
+  class TestEventHandler
+    include Qs::EventHandler
+
+    public :event
   end
 
 end

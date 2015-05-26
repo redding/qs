@@ -1,15 +1,16 @@
 require 'assert'
-require 'qs/test_helpers'
+require 'qs/event_handler_test_helpers'
 
-require 'qs/job_handler'
+require 'qs/event_handler'
+require 'qs/job_test_runner'
 require 'test/support/runner_spy'
 
-module Qs::TestHelpers
+module Qs::EventHandler::TestHelpers
 
   class UnitTests < Assert::Context
     desc "Qs::TestHelpers"
     setup do
-      @test_helpers = Qs::TestHelpers
+      @test_helpers = Qs::EventHandler::TestHelpers
     end
     subject{ @test_helpers }
 
@@ -18,28 +19,22 @@ module Qs::TestHelpers
   class MixinTests < UnitTests
     desc "as a mixin"
     setup do
-      context_class = Class.new{ include Qs::TestHelpers }
+      @handler_class = Class.new
+      @args = { Factory.string => Factory.string }
+
+      @runner_spy = nil
+      Assert.stub(Qs::EventTestRunner, :new) do |*args|
+        @runner_spy = RunnerSpy.new(*args)
+      end
+
+      context_class = Class.new{ include Qs::EventHandler::TestHelpers }
       @context = context_class.new
     end
     subject{ @context }
 
     should have_imeths :test_runner, :test_handler
 
-  end
-
-  class HandlerTestRunnerTests < MixinTests
-    desc "for handler testing"
-    setup do
-      @handler_class = Class.new
-      @args = { Factory.string => Factory.string }
-
-      @runner_spy = nil
-      Assert.stub(Qs::TestRunner, :new) do |*args|
-        @runner_spy = RunnerSpy.new(*args)
-      end
-    end
-
-    should "build a test runner for a given handler" do
+    should "build an event test runner for a given handler using `test_runner`" do
       result = subject.test_runner(@handler_class, @args)
 
       assert_not_nil @runner_spy
@@ -48,7 +43,7 @@ module Qs::TestHelpers
       assert_equal @runner_spy, result
     end
 
-    should "return an initialized handler instance" do
+    should "return an initialized handler instance using `test_handler`" do
       result = subject.test_handler(@handler_class, @args)
 
       assert_not_nil @runner_spy
@@ -58,4 +53,3 @@ module Qs::TestHelpers
   end
 
 end
-

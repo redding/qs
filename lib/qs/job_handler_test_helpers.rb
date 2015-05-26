@@ -1,11 +1,11 @@
-require 'qs/test_runner'
+require 'qs/job_test_runner'
 
-module Qs
+module Qs::JobHandler
 
   module TestHelpers
 
     def test_runner(handler_class, args = nil)
-      TestRunner.new(handler_class, args)
+      Qs::JobTestRunner.new(handler_class, args)
     end
 
     def test_handler(handler_class, args = nil)
