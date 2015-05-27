@@ -63,16 +63,45 @@ module Qs::Client
 
     should "build a job, enqueue it and return it using `enqueue`" do
       result = subject.enqueue(@queue, @job_name, @job_params)
-      enqueued_job = subject.enqueued_jobs.last
-      assert_equal @job_name,   enqueued_job.name
-      assert_equal @job_params, enqueued_job.params
-      assert_equal enqueued_job, result
+      call = subject.enqueue_calls.last
+      assert_equal @queue,      call.queue
+      assert_equal @job_name,   call.job.name
+      assert_equal @job_params, call.job.params
+      assert_equal call.job,    result
     end
 
     should "default the job's params to an empty hash using `enqueue`" do
       subject.enqueue(@queue, @job_name)
-      enqueued_job = subject.enqueued_jobs.last
-      assert_equal({}, enqueued_job.params)
+      call = subject.enqueue_calls.last
+      assert_equal({}, call.job.params)
+    end
+
+    should "build a dispatch job, enqueue it and return its event using `publish`" do
+      event_channel = Factory.string
+      event_name    = Factory.string
+      event_params  = @job_params
+      result = subject.publish(event_channel, event_name, event_params)
+
+      call = subject.enqueue_calls.last
+      assert_equal Qs.dispatcher_queue, call.queue
+
+      dispatch_job = Factory.dispatch_job({
+        :event_channel => event_channel,
+        :event_name    => event_name,
+        :event_params  => event_params
+      })
+      assert_equal dispatch_job.name,   call.job.name
+      assert_equal dispatch_job.params, call.job.params
+      assert_equal call.job.event,      result
+    end
+
+    should "default the dispatch job event params to an empty hash using `publish`" do
+      event_channel = Factory.string
+      event_name    = Factory.string
+      subject.publish(event_channel, event_name)
+
+      call = subject.enqueue_calls.last
+      assert_equal({}, call.job.params['event_params'])
     end
 
     should "raise a not implemented error using `push`" do
@@ -265,12 +294,14 @@ module Qs::Client
   class FakeClient
     include Qs::Client
 
-    attr_reader :enqueued_jobs
+    attr_reader :enqueue_calls
 
     def enqueue!(queue, job)
-      @enqueued_jobs ||= []
-      @enqueued_jobs << job
+      @enqueue_calls ||= []
+      EnqueueCall.new(queue, job).tap{ |c| @enqueue_calls << c }
     end
+
+    EnqueueCall = Struct.new(:queue, :job)
   end
 
 end

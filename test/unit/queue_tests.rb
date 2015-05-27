@@ -15,7 +15,7 @@ class Qs::Queue
     should have_readers :routes, :enqueued_jobs
     should have_imeths :name, :redis_key, :job_handler_ns, :job
     should have_imeths :enqueue, :add
-    should have_imeths :reset!
+    should have_imeths :published_events, :reset!
 
     should "default its routes to an empty array" do
       assert_equal [], subject.routes
@@ -70,6 +70,20 @@ class Qs::Queue
       route = subject.routes.last
       expected = "#{namespace}::#{handler_name}"
       assert_equal expected, route.handler_class_name
+    end
+
+    should "return the enqueued jobs events using `published_events`" do
+      dispatch_jobs = Factory.integer(3).times.map do
+        Factory.dispatch_job.tap{ |j| subject.enqueued_jobs << j }
+      end
+      assert_equal dispatch_jobs.map(&:event), subject.published_events
+    end
+
+    should "clear its enqueued jobs when reset" do
+      Factory.integer(3).times.map{ subject.enqueued_jobs << Factory.job }
+      assert_not_empty subject.enqueued_jobs
+      subject.reset!
+      assert_empty subject.enqueued_jobs
     end
 
     should "know its custom inspect" do

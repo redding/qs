@@ -42,6 +42,10 @@ module Qs
     end
     alias :add :enqueue
 
+    def published_events
+      self.enqueued_jobs.map(&:event)
+    end
+
     def reset!
       self.enqueued_jobs.clear
     end
