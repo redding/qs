@@ -12,18 +12,17 @@ class Qs::Queue
     end
     subject{ @queue }
 
-    should have_readers :routes, :enqueued_jobs
+    should have_readers :routes, :event_job_names, :enqueued_jobs
     should have_imeths :name, :redis_key
     should have_imeths :job_handler_ns, :job
     should have_imeths :event_handler_ns, :event
     should have_imeths :enqueue, :add
+    should have_imeths :sync_subscriptions, :clear_subscriptions
     should have_imeths :published_events, :reset!
 
-    should "default its routes to an empty array" do
+    should "default its routes, event job names and enqueued jobs" do
       assert_equal [], subject.routes
-    end
-
-    should "default its enqueued jobs to an empty array" do
+      assert_equal [], subject.event_job_names
       assert_equal [], subject.enqueued_jobs
     end
 
@@ -137,6 +136,16 @@ class Qs::Queue
       assert_equal handler_name, route.handler_class_name
     end
 
+    should "track its configured event job names" do
+      event_channel = Factory.string
+      event_name    = Factory.string
+      handler_name  = Factory.string
+      subject.event event_channel, event_name, handler_name
+
+      exp = Qs::Event::JobName.new(event_channel, event_name)
+      assert_equal [exp], subject.event_job_names
+    end
+
     should "return the enqueued jobs events using `published_events`" do
       dispatch_jobs = Factory.integer(3).times.map do
         Factory.dispatch_job.tap{ |j| subject.enqueued_jobs << j }
@@ -187,6 +196,26 @@ class Qs::Queue
       exp = [subject, @job_name, @job_params]
       assert_equal exp, @enqueue_args
       assert_equal @enqueue_args, result
+    end
+
+  end
+
+  class SubscriptionsTests < UnitTests
+    setup do
+      @sync_args = nil
+      Assert.stub(Qs, :sync_subscriptions){ |*args| @sync_args = args }
+      @clear_args = nil
+      Assert.stub(Qs, :clear_subscriptions){ |*args| @clear_args = args }
+    end
+
+    should "use Qs to sync its subscriptions" do
+      subject.sync_subscriptions
+      assert_equal [subject], @sync_args
+    end
+
+    should "use Qs to clear its subscriptions" do
+      subject.clear_subscriptions
+      assert_equal [subject], @clear_args
     end
 
   end

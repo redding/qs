@@ -79,6 +79,12 @@ module Qs
       end
     end
 
+    module SubscribersRedisKey
+      def self.new(event_job_name)
+        "events:#{event_job_name}:subscribers"
+      end
+    end
+
   end
 
   BadEventError = Class.new(ArgumentError)

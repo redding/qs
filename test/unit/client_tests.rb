@@ -52,6 +52,7 @@ module Qs::Client
     should have_imeths :block_dequeue
     should have_imeths :append, :prepend
     should have_imeths :clear
+    should have_imeths :sync_subscriptions, :clear_subscriptions
 
     should "know its redis config" do
       assert_equal @redis_config, subject.redis_config
@@ -161,6 +162,62 @@ module Qs::Client
 
       call = @connection_spy.redis_calls.last
       assert_equal :ping, call.command
+    end
+
+  end
+
+  class SyncSubscriptionsTests < RedisCallTests
+    desc "sync_subscriptions"
+    setup do
+      Factory.integer(3).times.map{ @queue.event_job_names << Factory.string }
+      subject.sync_subscriptions(@queue)
+    end
+
+    should "run in a pipelined transaction" do
+      calls = @connection_spy.redis_calls[0, 2]
+      assert_equal [:pipelined, :multi], calls.map(&:command)
+    end
+
+    should "add the queue to each events subscribers" do
+      calls = @connection_spy.redis_calls[2..-1]
+      assert_equal @queue.event_job_names.size, calls.size
+      assert_equal [:sadd], calls.map(&:command).uniq
+      exp = @queue.event_job_names.map do |name|
+        [Qs::Event::SubscribersRedisKey.new(name), @queue.name]
+      end
+      assert_equal exp, calls.map(&:args)
+    end
+
+  end
+
+  class ClearSubscriptionsTests < RedisCallTests
+    desc "clear_subscriptions"
+    setup do
+      @event_subs_keys = Factory.integer(3).times.map{ Factory.string }
+      @keys_pattern = nil
+      Assert.stub(@connection_spy.redis_spy, :keys) do |pattern|
+        @keys_pattern = pattern
+        @event_subs_keys
+      end
+
+      subject.clear_subscriptions(@queue)
+    end
+
+    should "run in a pipelined transaction" do
+      calls = @connection_spy.redis_calls[0, 2]
+      assert_equal [:pipelined, :multi], calls.map(&:command)
+    end
+
+    should "find all event subscribers keys" do
+      assert_equal Qs::Event::SubscribersRedisKey.new('*'), @keys_pattern
+    end
+
+    should "remove the queue from all events subscribers" do
+      calls = @connection_spy.redis_calls[2..-1]
+      assert_equal @event_subs_keys.size, calls.size
+      assert_equal [:srem], calls.map(&:command).uniq
+      exp = @event_subs_keys.map{ |key| [key, @queue.name] }
+      assert_equal exp, calls.map(&:args)
     end
 
   end
