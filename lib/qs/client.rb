@@ -90,6 +90,10 @@ module Qs
         end
       end
 
+      def event_subscribers(event)
+        self.redis.with{ |c| c.smembers(event.subscribers_redis_key) }
+      end
+
       private
 
       def publish!(channel, name, options = nil)

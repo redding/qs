@@ -23,6 +23,7 @@ module Qs
     should have_imeths :enqueue, :publish, :publish_as, :push
     should have_imeths :encode, :decode
     should have_imeths :sync_subscriptions, :clear_subscriptions
+    should have_imeths :event_subscribers
     should have_imeths :client, :redis, :redis_config
     should have_imeths :dispatcher_queue, :dispatcher_job_name
     should have_imeths :event_publisher
@@ -152,7 +153,7 @@ module Qs
       assert_equal value.to_i, result
     end
 
-    should "demete its clients subscription methods" do
+    should "demeter its clients subscription methods" do
       queue = Qs::Queue.new{ name Factory.string }
 
       subject.sync_subscriptions(queue)
@@ -162,6 +163,14 @@ module Qs
       subject.clear_subscriptions(queue)
       call = @client_spy.clear_subscriptions_calls.last
       assert_equal queue, call.queue
+    end
+
+    should "demeter its event publishers method to its client" do
+      event = Factory.event
+      subject.event_subscribers(event)
+
+      call = @client_spy.event_subscribers_calls.last
+      assert_equal event, call.event
     end
 
     should "return the dispatcher queue published events using `published_events`" do
@@ -267,6 +276,7 @@ module Qs
     attr_reader :redis_config, :redis
     attr_reader :enqueue_calls, :publish_calls, :push_calls
     attr_reader :sync_subscriptions_calls, :clear_subscriptions_calls
+    attr_reader :event_subscribers_calls
 
     def initialize(redis_confg)
       @redis_config  = redis_confg
@@ -274,9 +284,9 @@ module Qs
       @enqueue_calls = []
       @publish_calls = []
       @push_calls    = []
-      @read_subscriptions_calls  = []
       @sync_subscriptions_calls  = []
       @clear_subscriptions_calls = []
+      @event_subscribers_calls   = []
     end
 
     def enqueue(queue, name, params = nil)
@@ -296,17 +306,22 @@ module Qs
     end
 
     def sync_subscriptions(queue)
-      @sync_subscriptions_calls << SubscriptionCall.new(queue)
+      @sync_subscriptions_calls << SubscriptionsCall.new(queue)
     end
 
     def clear_subscriptions(queue)
-      @clear_subscriptions_calls << SubscriptionCall.new(queue)
+      @clear_subscriptions_calls << SubscriptionsCall.new(queue)
     end
 
-    EnqueueCall      = Struct.new(:queue, :job_name, :job_params)
-    PublishCall      = Struct.new(:event_channel, :event_name, :event_params, :event_publisher)
-    PushCall         = Struct.new(:queue_name, :payload)
-    SubscriptionCall = Struct.new(:queue, :event_job_names)
+    def event_subscribers(event)
+      @event_subscribers_calls << SubscribersCall.new(event)
+    end
+
+    EnqueueCall       = Struct.new(:queue, :job_name, :job_params)
+    PublishCall       = Struct.new(:event_channel, :event_name, :event_params, :event_publisher)
+    PushCall          = Struct.new(:queue_name, :payload)
+    SubscriptionsCall = Struct.new(:queue, :event_job_names)
+    SubscribersCall   = Struct.new(:event)
   end
 
 end
