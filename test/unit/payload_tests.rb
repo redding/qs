@@ -57,6 +57,7 @@ module Qs::Payload
         'channel'      => event.channel,
         'name'         => event.name,
         'params'       => event.params,
+        'publisher'    => event.publisher,
         'published_at' => Timestamp.new(event.published_at)
       }
       assert_equal event, subject.event(payload_hash)
@@ -65,9 +66,10 @@ module Qs::Payload
 
     should "sanitize its events attributes when building an event payload hash" do
       event = Factory.event({
-        :channel => Factory.string.to_sym,
-        :name    => Factory.string.to_sym,
-        :params  => { Factory.string.to_sym => Factory.string }
+        :channel   => Factory.string.to_sym,
+        :name      => Factory.string.to_sym,
+        :params    => { Factory.string.to_sym => Factory.string },
+        :publisher => Factory.string.to_sym
       })
       payload_hash = subject.event_hash(event)
 
@@ -75,6 +77,7 @@ module Qs::Payload
       assert_equal event.name.to_s,    payload_hash['name']
       exp = StringifyParams.new(event.params)
       assert_equal exp, payload_hash['params']
+      assert_equal event.publisher.to_s, payload_hash['publisher']
     end
 
     should "raise errors for unknown parent types" do

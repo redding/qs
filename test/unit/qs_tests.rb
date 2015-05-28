@@ -20,11 +20,12 @@ module Qs
     subject{ @module }
 
     should have_imeths :config, :configure, :init, :reset!
-    should have_imeths :enqueue, :publish, :push
+    should have_imeths :enqueue, :publish, :publish_as, :push
     should have_imeths :encode, :decode
     should have_imeths :sync_subscriptions, :clear_subscriptions
     should have_imeths :client, :redis, :redis_config
     should have_imeths :dispatcher_queue, :dispatcher_job_name
+    should have_imeths :event_publisher
     should have_imeths :published_events
 
     should "know its config" do
@@ -75,12 +76,14 @@ module Qs
       assert_equal expected, subject.config.redis.url
     end
 
-    should "know its dispatcher queue and dispatcher job name" do
+    should "know its dispatcher queue, dispatcher job name and event publisher" do
       assert_instance_of Qs::Queue, subject.dispatcher_queue
       exp = subject.config.dispatcher_name
       assert_equal exp, subject.dispatcher_queue.name
       exp = subject.config.dispatcher_job_name
       assert_equal exp, subject.dispatcher_job_name
+      exp = subject.config.event_publisher
+      assert_equal exp, subject.event_publisher
     end
 
     should "build a client" do
@@ -111,6 +114,20 @@ module Qs
       assert_equal event_channel, call.event_channel
       assert_equal event_name,    call.event_name
       assert_equal event_params,  call.event_params
+    end
+
+    should "call publish as on its client using `publish_as`" do
+      event_publisher = Factory.string
+      event_channel   = Factory.string
+      event_name      = Factory.string
+      event_params    = { Factory.string => Factory.string }
+      subject.publish_as(event_publisher, event_channel, event_name, event_params)
+
+      call = @client_spy.publish_calls.last
+      assert_equal event_publisher, call.event_publisher
+      assert_equal event_channel,   call.event_channel
+      assert_equal event_name,      call.event_name
+      assert_equal event_params,    call.event_params
     end
 
     should "call push on its client using `push`" do
@@ -187,6 +204,7 @@ module Qs
 
     should have_options :dispatcher_name, :dispatcher_job_name
     should have_options :encoder, :decoder, :timeout
+    should have_options :event_publisher
     should have_namespace :redis
 
     should "know its default dispatcher name and job name" do
@@ -206,6 +224,10 @@ module Qs
 
     should "know its default timeout" do
       assert_nil subject.timeout
+    end
+
+    should "not have a default event publisher" do
+      assert_nil subject.event_publisher
     end
 
     should "know its default redis options" do
@@ -257,12 +279,16 @@ module Qs
       @clear_subscriptions_calls = []
     end
 
-    def enqueue(queue, job_name, job_params = nil)
-      @enqueue_calls << EnqueueCall.new(queue, job_name, job_params)
+    def enqueue(queue, name, params = nil)
+      @enqueue_calls << EnqueueCall.new(queue, name, params)
     end
 
-    def publish(channel, name, params)
+    def publish(channel, name, params = nil)
       @publish_calls << PublishCall.new(channel, name, params)
+    end
+
+    def publish_as(publisher, channel, name, params = nil)
+      @publish_calls << PublishCall.new(channel, name, params, publisher)
     end
 
     def push(queue_name, payload)
@@ -278,7 +304,7 @@ module Qs
     end
 
     EnqueueCall      = Struct.new(:queue, :job_name, :job_params)
-    PublishCall      = Struct.new(:event_channel, :event_name, :event_params)
+    PublishCall      = Struct.new(:event_channel, :event_name, :event_params, :event_publisher)
     PushCall         = Struct.new(:queue_name, :payload)
     SubscriptionCall = Struct.new(:queue, :event_job_names)
   end

@@ -6,13 +6,14 @@ module Qs
 
     PAYLOAD_TYPE = 'event'
 
-    attr_reader :channel, :name, :published_at
+    attr_reader :channel, :name, :publisher, :published_at
 
     def initialize(channel, name, params, options = nil)
       validate!(channel, name, params)
       options ||= {}
       @channel      = channel
       @name         = name
+      @publisher    = options[:publisher]
       @published_at = options[:published_at] || Time.now
       super(PAYLOAD_TYPE, params)
     end
@@ -27,6 +28,7 @@ module Qs
       "@channel=#{self.channel.inspect} " \
       "@name=#{self.name.inspect} " \
       "@params=#{self.params.inspect} " \
+      "@publisher=#{self.publisher.inspect} " \
       "@published_at=#{self.published_at.inspect}>"
     end
 
@@ -36,6 +38,7 @@ module Qs
         self.channel      == other.channel      &&
         self.name         == other.name         &&
         self.params       == other.params       &&
+        self.publisher    == other.publisher    &&
         self.published_at == other.published_at
       else
         super

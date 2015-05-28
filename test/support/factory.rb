@@ -49,6 +49,7 @@ module Factory
     params[:channel]      ||= Factory.string
     params[:name]         ||= Factory.string
     params[:params]       ||= { Factory.string => Factory.string }
+    params[:publisher]    ||= Factory.string
     params[:published_at] ||= Factory.time
     Qs::Event.new(
       params.delete(:channel),
