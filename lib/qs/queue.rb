@@ -1,15 +1,17 @@
+require 'qs'
 require 'qs/route'
 
 module Qs
 
   class Queue
 
-    attr_reader :routes
+    attr_reader :routes, :event_job_names
     attr_reader :enqueued_jobs
 
     def initialize(&block)
-      @routes = []
-      @enqueued_jobs = []
+      @routes          = []
+      @event_job_names = []
+      @enqueued_jobs   = []
       self.instance_eval(&block) if !block.nil?
       raise InvalidError, "a queue must have a name" if self.name.nil?
     end
@@ -47,8 +49,10 @@ module Qs
         handler_name = "#{self.event_handler_ns}::#{handler_name}"
       end
 
-      job_name   = Qs::Event::JobName.new(channel, name)
+      job_name = Qs::Event::JobName.new(channel, name)
       route_name = Qs::Job::RouteName.new(Qs::Event::PAYLOAD_TYPE, job_name)
+
+      @event_job_names.push(job_name)
       @routes.push(Qs::Route.new(route_name, handler_name))
     end
 
@@ -56,6 +60,14 @@ module Qs
       Qs.enqueue(self, job_name, params)
     end
     alias :add :enqueue
+
+    def sync_subscriptions
+      Qs.sync_subscriptions(self)
+    end
+
+    def clear_subscriptions
+      Qs.clear_subscriptions(self)
+    end
 
     def published_events
       self.enqueued_jobs.map(&:event)
@@ -77,7 +89,7 @@ module Qs
 
     module RedisKey
       def self.parse_name(key)
-        key.split(':').last
+        key.split(':', 2).last
       end
 
       def self.new(name)

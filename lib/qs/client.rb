@@ -66,6 +66,30 @@ module Qs
         self.redis.with{ |c| c.ping }
       end
 
+      def sync_subscriptions(queue)
+        event_subs_keys = queue.event_job_names.map do |event_job_name|
+          Qs::Event::SubscribersRedisKey.new(event_job_name)
+        end
+        redis_transaction do |c|
+          event_subs_keys.each{ |key| c.sadd(key, queue.name) }
+        end
+      end
+
+      def clear_subscriptions(queue)
+        pattern = Qs::Event::SubscribersRedisKey.new('*')
+        event_subs_keys = self.redis.with{ |c| c.keys(pattern) }
+
+        redis_transaction do |c|
+          event_subs_keys.each{ |key| c.srem(key, queue.name) }
+        end
+      end
+
+      private
+
+      def redis_transaction
+        self.redis.with{ |c| c.pipelined{ c.multi{ yield c } } }
+      end
+
     end
 
   end

@@ -122,4 +122,18 @@ class Qs::Event
 
   end
 
+  class SubscribersRedisKeyTests < UnitTests
+    desc "SubscribersRedisKey"
+    subject{ SubscribersRedisKey }
+
+    should have_imeths :new
+
+    should "return an event subscribers redis key given an event job name" do
+      event_job_name = JobName.new(@channel, @name)
+      exp = "events:#{event_job_name}:subscribers"
+      assert_equal exp, subject.new(event_job_name)
+    end
+
+  end
+
 end

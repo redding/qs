@@ -19,7 +19,7 @@ Gem::Specification.new do |gem|
   gem.require_paths = ["lib"]
 
   gem.add_dependency("dat-worker-pool", ["~> 0.5"])
-  gem.add_dependency("hella-redis",     ["~> 0.2"])
+  gem.add_dependency("hella-redis",     ["~> 0.3"])
   gem.add_dependency("ns-options",      ["~> 1.1"])
   gem.add_dependency("SystemTimer",     ["~> 1.2"])
 

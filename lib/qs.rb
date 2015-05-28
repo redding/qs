@@ -61,6 +61,14 @@ module Qs
     @deserializer.call(serialized_payload)
   end
 
+  def self.sync_subscriptions(queue)
+    self.client.sync_subscriptions(queue)
+  end
+
+  def self.clear_subscriptions(queue)
+    self.client.clear_subscriptions(queue)
+  end
+
   def self.client
     @client
   end
