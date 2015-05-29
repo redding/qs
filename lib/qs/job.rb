@@ -4,14 +4,6 @@ module Qs
 
     PAYLOAD_TYPE = 'job'
 
-    def self.parse(payload)
-      created_at = Time.at(payload['created_at'].to_i)
-      self.new(payload['name'], payload['params'], {
-        :type       => payload['type'],
-        :created_at => created_at
-      })
-    end
-
     attr_reader :payload_type, :name, :params, :created_at
 
     def initialize(name, params, options = nil)
@@ -30,14 +22,6 @@ module Qs
       @route_name ||= RouteName.new(self.payload_type, self.name)
     end
 
-    def to_payload
-      { 'type'       => self.payload_type.to_s,
-        'name'       => self.name.to_s,
-        'params'     => StringifyParams.new(self.params),
-        'created_at' => self.created_at.to_i
-      }
-    end
-
     def inspect
       reference = '0x0%x' % (self.object_id << 1)
       "#<#{self.class}:#{reference} " \
@@ -48,7 +32,10 @@ module Qs
 
     def ==(other)
       if other.kind_of?(self.class)
-        self.to_payload == other.to_payload
+        self.payload_type == other.payload_type &&
+        self.name         == other.name         &&
+        self.params       == other.params       &&
+        self.created_at   == other.created_at
       else
         super
       end
@@ -68,19 +55,6 @@ module Qs
     module RouteName
       def self.new(payload_type, name)
         "#{payload_type}|#{name}"
-      end
-    end
-
-    module StringifyParams
-      def self.new(object)
-        case(object)
-        when Hash
-          object.inject({}){ |h, (k, v)| h.merge(k.to_s => self.new(v)) }
-        when Array
-          object.map{ |item| self.new(item) }
-        else
-          object
-        end
       end
     end
 

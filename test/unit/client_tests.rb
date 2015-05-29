@@ -118,8 +118,8 @@ module Qs::Client
       @connection_spy = HellaRedis::ConnectionSpy.new(@client.redis_config)
       Assert.stub(@client, :redis){ @connection_spy }
 
-      @queue_redis_key    = Factory.string
-      @serialized_payload = Factory.string
+      @queue_redis_key = Factory.string
+      @encoded_payload = Factory.string
     end
 
     should "block pop from the front of a list using `block_dequeue`" do
@@ -131,22 +131,22 @@ module Qs::Client
       assert_equal args,   call.args
     end
 
-    should "add a serialized payload to the end of a list using `append`" do
-      subject.append(@queue_redis_key, @serialized_payload)
+    should "add a encoded payload to the end of a list using `append`" do
+      subject.append(@queue_redis_key, @encoded_payload)
 
       call = @connection_spy.redis_calls.last
-      assert_equal :lpush,              call.command
-      assert_equal @queue_redis_key,    call.args.first
-      assert_equal @serialized_payload, call.args.last
+      assert_equal :lpush,           call.command
+      assert_equal @queue_redis_key, call.args.first
+      assert_equal @encoded_payload, call.args.last
     end
 
-    should "add a serialized payload to the front of a list using `prepend`" do
-      subject.prepend(@queue_redis_key, @serialized_payload)
+    should "add a encoded payload to the front of a list using `prepend`" do
+      subject.prepend(@queue_redis_key, @encoded_payload)
 
       call = @connection_spy.redis_calls.last
-      assert_equal :rpush,              call.command
-      assert_equal @queue_redis_key,    call.args.first
-      assert_equal @serialized_payload, call.args.last
+      assert_equal :rpush,           call.command
+      assert_equal @queue_redis_key, call.args.first
+      assert_equal @encoded_payload, call.args.last
     end
 
     should "del a list using `clear`" do
@@ -253,25 +253,25 @@ module Qs::Client
       assert_equal @connection_spy, subject.redis
     end
 
-    should "add jobs to the queue's redis list using `enqueue`" do
+    should "add jobs to the queues redis list using `enqueue`" do
       subject.enqueue(@queue, @job_name, @job_params)
 
       call = @connection_spy.redis_calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
-      payload = Qs.deserialize(call.args.last)
-      assert_equal @job_name,   payload['name']
-      assert_equal @job_params, payload['params']
+      job = Qs::Payload.deserialize(call.args.last)
+      assert_equal @job_name,   job.name
+      assert_equal @job_params, job.params
     end
 
-    should "add payloads to the queue's redis list using `push`" do
-      job = Qs::Job.new(@job_name, @job_params)
-      subject.push(@queue.name, job.to_payload)
+    should "add a payload hash to the queues redis list using `push`" do
+      payload_hash = { Factory.string => Factory.string }
+      subject.push(@queue.name, payload_hash)
 
       call = @connection_spy.redis_calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
-      assert_equal Qs.serialize(job.to_payload), call.args.last
+      assert_equal Qs.encode(payload_hash), call.args.last
     end
 
   end
@@ -292,10 +292,10 @@ module Qs::Client
   class TestClientInitTests < TestClientTests
     desc "when init"
     setup do
-      @serialized_payload = nil
-      Assert.stub(Qs, :serialize){ |payload| @serialized_payload = payload }
-
-      @job = Qs::Job.new(@job_name, @job_params)
+      @encoded_hash = nil
+      Assert.stub(Qs, :encode){ |hash| @encoded_hash = hash }
+      @serialized_job = nil
+      Assert.stub(Qs::Payload, :serialize){ |job| @serialized_job = job }
 
       @client = @client_class.new(@redis_config)
     end
@@ -323,24 +323,34 @@ module Qs::Client
       assert_equal job, result
     end
 
-    should "serialize the jobs when enqueueing" do
+    should "serialize the job when enqueueing" do
       subject.enqueue(@queue, @job_name, @job_params)
 
       job = @queue.enqueued_jobs.last
-      assert_equal job.to_payload, @serialized_payload
+      assert_equal job, @serialized_job
     end
 
-    should "track all the payloads pushed onto a queue" do
-      subject.push(@queue.name, @job.to_payload)
+    should "track all the payload hashes pushed onto a queue" do
+      payload_hash = { Factory.string => Factory.string }
+      subject.push(@queue.name, payload_hash)
 
       pushed_item = subject.pushed_items.last
       assert_instance_of Qs::TestClient::PushedItem, pushed_item
-      assert_equal @queue.name,     pushed_item.queue_name
-      assert_equal @job.to_payload,  pushed_item.payload
+      assert_equal @queue.name,  pushed_item.queue_name
+      assert_equal payload_hash, pushed_item.payload_hash
+    end
+
+    should "encode the payload hashes when pushing them onto a queue" do
+      payload_hash = { Factory.string => Factory.string }
+      subject.push(@queue.name, payload_hash)
+
+      pushed_item = subject.pushed_items.last
+      assert_equal pushed_item.payload_hash, @encoded_hash
     end
 
     should "clear its pushed items when reset" do
-      subject.push(@queue.name, @job.to_payload)
+      payload_hash = { Factory.string => Factory.string }
+      subject.push(@queue.name, payload_hash)
       assert_not_empty subject.pushed_items
       subject.reset!
       assert_empty subject.pushed_items

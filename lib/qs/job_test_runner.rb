@@ -1,8 +1,8 @@
 require 'qs'
 require 'qs/event'
 require 'qs/event_handler'
-require 'qs/job'
 require 'qs/job_handler'
+require 'qs/payload'
 require 'qs/runner'
 
 module Qs
@@ -32,11 +32,11 @@ module Qs
 
     private
 
-    # Stringify and serialize/deserialize to ensure params are valid and are
+    # Stringify and encode/decode to ensure params are valid and are
     # in the format they would normally be when a handler is built and run.
     def normalize_params(params)
-      params = Job::StringifyParams.new(params)
-      Qs.deserialize(Qs.serialize(params))
+      params = Qs::Payload::StringifyParams.new(params)
+      Qs.decode(Qs.encode(params))
     end
 
   end

@@ -71,7 +71,7 @@ class Qs::JobTestRunner
       assert_nil @handler.after_called
     end
 
-    should "stringify and serialize the params passed to it" do
+    should "stringify and encode the params passed to it" do
       key, value = Factory.string.to_sym, Factory.string
       params = {
         key    => value,
@@ -140,7 +140,7 @@ class Qs::JobTestRunner
         @args[:event_channel],
         @args[:event_name],
         @args[:params],
-        @args[:event_published_at]
+        { :published_at => @args[:event_published_at] }
       ).job
       assert_equal exp_job,        subject.job
       assert_equal exp_job.params, subject.params

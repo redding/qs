@@ -275,8 +275,8 @@ module Qs::Daemon
       @daemon = @daemon_class.new
       @thread = @daemon.start
 
-      @serialized_payload = Factory.string
-      @client_spy.append(@queue.redis_key, @serialized_payload)
+      @encoded_payload = Factory.string
+      @client_spy.append(@queue.redis_key, @encoded_payload)
     end
     subject{ @daemon }
 
@@ -285,7 +285,7 @@ module Qs::Daemon
       assert_equal :block_dequeue, call.command
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
-      exp = Qs::RedisItem.new(@queue.redis_key, @serialized_payload)
+      exp = Qs::RedisItem.new(@queue.redis_key, @encoded_payload)
       assert_equal exp, @worker_pool_spy.work_items.first
     end
 
@@ -383,8 +383,8 @@ module Qs::Daemon
       @callback.call('worker', @exception, @redis_item)
       call = @client_spy.calls.detect{ |c| c.command == :prepend }
       assert_not_nil call
-      assert_equal @redis_item.queue_redis_key,    call.args.first
-      assert_equal @redis_item.serialized_payload, call.args.last
+      assert_equal @redis_item.queue_redis_key, call.args.first
+      assert_equal @redis_item.encoded_payload, call.args.last
     end
 
     should "not requeue the redis item if it was started" do
@@ -416,8 +416,8 @@ module Qs::Daemon
     should "requeue any work left on the pool" do
       call = @client_spy.calls.last
       assert_equal :prepend, call.command
-      assert_equal @redis_item.queue_redis_key,    call.args.first
-      assert_equal @redis_item.serialized_payload, call.args.last
+      assert_equal @redis_item.queue_redis_key, call.args.first
+      assert_equal @redis_item.encoded_payload, call.args.last
     end
 
     should "stop the work loop thread" do
@@ -463,8 +463,8 @@ module Qs::Daemon
     should "requeue any work left on the pool" do
       call = @client_spy.calls.last
       assert_equal :prepend, call.command
-      assert_equal @redis_item.queue_redis_key,    call.args.first
-      assert_equal @redis_item.serialized_payload, call.args.last
+      assert_equal @redis_item.queue_redis_key, call.args.first
+      assert_equal @redis_item.encoded_payload, call.args.last
     end
 
     should "stop the work loop thread" do
@@ -502,7 +502,7 @@ module Qs::Daemon
       # cause the daemon to loop, its sleeping on the original block_dequeue
       # call that happened before the stub
       @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
-      @client_spy.append(@redis_item.queue_redis_key, @redis_item.serialized_payload)
+      @client_spy.append(@redis_item.queue_redis_key, @redis_item.encoded_payload)
     end
 
     should "shutdown the worker pool" do
@@ -513,8 +513,8 @@ module Qs::Daemon
     should "requeue any work left on the pool" do
       call = @client_spy.calls.last
       assert_equal :prepend, call.command
-      assert_equal @redis_item.queue_redis_key,    call.args.first
-      assert_equal @redis_item.serialized_payload, call.args.last
+      assert_equal @redis_item.queue_redis_key, call.args.first
+      assert_equal @redis_item.encoded_payload, call.args.last
     end
 
     should "stop the work loop thread" do

@@ -24,18 +24,18 @@ module Qs
       Queue.new{ name(dispatcher_name) }
     end
 
-    @serializer   ||= self.config.serializer
-    @deserializer ||= self.config.deserializer
-    @client       ||= Client.new(self.redis_config)
-    @redis        ||= @client.redis
+    @encoder ||= self.config.encoder
+    @decoder ||= self.config.decoder
+    @client  ||= Client.new(self.redis_config)
+    @redis   ||= @client.redis
     true
   end
 
   def self.reset!
     self.config.reset
     @dispatcher_queue = nil
-    @serializer       = nil
-    @deserializer     = nil
+    @encoder          = nil
+    @decoder          = nil
     @client           = nil
     @redis            = nil
     true
@@ -53,12 +53,12 @@ module Qs
     @client.push(queue_name, payload)
   end
 
-  def self.serialize(payload)
-    @serializer.call(payload)
+  def self.encode(payload)
+    @encoder.call(payload)
   end
 
-  def self.deserialize(serialized_payload)
-    @deserializer.call(serialized_payload)
+  def self.decode(encoded_payload)
+    @decoder.call(encoded_payload)
   end
 
   def self.sync_subscriptions(queue)
@@ -99,8 +99,8 @@ module Qs
     option :dispatcher_name,     String, :default => 'dispatcher'
     option :dispatcher_job_name, String, :default => 'dispatch_event'
 
-    option :serializer,   Proc, :default => proc{ |p| ::JSON.dump(p) }
-    option :deserializer, Proc, :default => proc{ |p| ::JSON.load(p) }
+    option :encoder, Proc, :default => proc{ |p| ::JSON.dump(p) }
+    option :decoder, Proc, :default => proc{ |p| ::JSON.load(p) }
 
     option :timeout, Float
 

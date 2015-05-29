@@ -13,11 +13,11 @@ class Qs::ErrorHandler
       @daemon_data     = Qs::DaemonData.new
       @queue_redis_key = Qs::Queue::RedisKey.new(Factory.string)
       @context_hash    = {
-        :daemon_data        => @daemon_data,
-        :queue_redis_key    => @queue_redis_key,
-        :serialized_payload => Factory.string,
-        :job                => Factory.string,
-        :handler_class      => Factory.string
+        :daemon_data     => @daemon_data,
+        :queue_redis_key => @queue_redis_key,
+        :encoded_payload => Factory.string,
+        :job             => Factory.string,
+        :handler_class   => Factory.string
       }
 
       @handler_class = Qs::ErrorHandler
@@ -107,14 +107,14 @@ class Qs::ErrorHandler
     subject{ @context }
 
     should have_readers :daemon_data
-    should have_readers :queue_name, :serialized_payload
+    should have_readers :queue_name, :encoded_payload
     should have_readers :job, :handler_class
 
     should "know its attributes" do
       assert_equal @context_hash[:daemon_data], subject.daemon_data
       exp = Qs::Queue::RedisKey.parse_name(@context_hash[:queue_redis_key])
       assert_equal exp, subject.queue_name
-      assert_equal @context_hash[:serialized_payload], subject.serialized_payload
+      assert_equal @context_hash[:encoded_payload], subject.encoded_payload
       assert_equal @context_hash[:job], subject.job
       assert_equal @context_hash[:handler_class], subject.handler_class
     end
