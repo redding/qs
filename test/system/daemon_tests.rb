@@ -190,8 +190,8 @@ module Qs::Daemon
       @thread.join 2 # give it time to shutdown, should be faster
       assert_false @thread.alive?
       # TODO - better way to read whats on a queue
-      serialized_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
-      names = serialized_payloads.map{ |sp| Qs::Job.parse(Qs.deserialize(sp)).name }
+      encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
+      names = encoded_payloads.map{ |sp| Qs::Payload.deserialize(sp).name }
       assert_equal ['basic', 'slow', 'slow'], names
     end
 
@@ -200,8 +200,8 @@ module Qs::Daemon
       @thread.join 2 # give it time to shutdown, should be faster
       assert_false @thread.alive?
       # TODO - better way to read whats on a queue
-      serialized_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
-      names = serialized_payloads.map{ |sp| Qs::Job.parse(Qs.deserialize(sp)).name }
+      encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
+      names = encoded_payloads.map{ |sp| Qs::Payload.deserialize(sp).name }
       assert_equal ['basic', 'slow', 'slow'], names
     end
 

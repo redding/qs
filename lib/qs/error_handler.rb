@@ -31,24 +31,24 @@ module Qs
 
   class ErrorContext
     attr_reader :daemon_data
-    attr_reader :queue_name, :serialized_payload
+    attr_reader :queue_name, :encoded_payload
     attr_reader :job, :handler_class
 
     def initialize(args)
-      @daemon_data        = args[:daemon_data]
-      @queue_name         = Queue::RedisKey.parse_name(args[:queue_redis_key].to_s)
-      @serialized_payload = args[:serialized_payload]
-      @job                = args[:job]
-      @handler_class      = args[:handler_class]
+      @daemon_data     = args[:daemon_data]
+      @queue_name      = Queue::RedisKey.parse_name(args[:queue_redis_key].to_s)
+      @encoded_payload = args[:encoded_payload]
+      @job             = args[:job]
+      @handler_class   = args[:handler_class]
     end
 
     def ==(other)
       if other.kind_of?(self.class)
-        self.daemon_data        == other.daemon_data &&
-        self.queue_name         == other.queue_name &&
-        self.serialized_payload == other.serialized_payload &&
-        self.job                == other.job &&
-        self.handler_class      == other.handler_class
+        self.daemon_data     == other.daemon_data &&
+        self.queue_name      == other.queue_name &&
+        self.encoded_payload == other.encoded_payload &&
+        self.job             == other.job &&
+        self.handler_class   == other.handler_class
       else
         super
       end

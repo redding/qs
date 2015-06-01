@@ -11,4 +11,4 @@ ROOT_PATH = Pathname.new(File.expand_path('../..', __FILE__))
 
 require 'test/support/factory'
 
-require 'json' # so the default serializer/deserializer procs will work
+require 'json' # so the default encoder/decoder procs will work

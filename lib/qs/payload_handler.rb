@@ -1,9 +1,8 @@
 require 'benchmark'
 require 'dat-worker-pool'
-require 'qs'
 require 'qs/error_handler'
-require 'qs/job'
 require 'qs/logger'
+require 'qs/payload'
 
 module Qs
 
@@ -33,8 +32,7 @@ module Qs
     def run!(daemon_data, redis_item)
       redis_item.started = true
 
-      payload = Qs.deserialize(redis_item.serialized_payload)
-      job = Qs::Job.parse(payload)
+      job = Qs::Payload.deserialize(redis_item.encoded_payload)
       log_job(job)
       redis_item.job = job
 
@@ -57,11 +55,11 @@ module Qs
 
     def handle_exception(exception, daemon_data, redis_item)
       error_handler = Qs::ErrorHandler.new(exception, {
-        :daemon_data        => daemon_data,
-        :queue_redis_key    => redis_item.queue_redis_key,
-        :serialized_payload => redis_item.serialized_payload,
-        :job                => redis_item.job,
-        :handler_class      => redis_item.handler_class
+        :daemon_data     => daemon_data,
+        :queue_redis_key => redis_item.queue_redis_key,
+        :encoded_payload => redis_item.encoded_payload,
+        :job             => redis_item.job,
+        :handler_class   => redis_item.handler_class
       }).tap(&:run)
       redis_item.exception = error_handler.exception
       log_exception(redis_item.exception)

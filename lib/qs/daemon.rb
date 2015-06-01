@@ -151,9 +151,9 @@ module Qs
 
         begin
           args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
-          redis_key, serialized_payload = @client.block_dequeue(*args)
+          redis_key, encoded_payload = @client.block_dequeue(*args)
           if redis_key != @signals_redis_key
-            @worker_pool.add_work(RedisItem.new(redis_key, serialized_payload))
+            @worker_pool.add_work(RedisItem.new(redis_key, encoded_payload))
           end
         rescue RuntimeError => exception
           log "Error dequeueing #{exception.message.inspect}", :error
@@ -180,7 +180,7 @@ module Qs
         @worker_pool.shutdown(timeout)
         log "Requeueing #{@worker_pool.work_items.size} job(s)"
         @worker_pool.work_items.each do |ri|
-          @client.prepend(ri.queue_redis_key, ri.serialized_payload)
+          @client.prepend(ri.queue_redis_key, ri.encoded_payload)
         end
       end
 
@@ -205,7 +205,7 @@ module Qs
         return if redis_item.nil?
         if !redis_item.started
           log "Worker error, requeueing job because it hasn't started", :error
-          @client.prepend(redis_item.queue_redis_key, redis_item.serialized_payload)
+          @client.prepend(redis_item.queue_redis_key, redis_item.encoded_payload)
         else
           log "Worker error after job was processed, ignoring", :error
         end

@@ -2,6 +2,7 @@ require 'hella-redis'
 require 'qs'
 require 'qs/dispatch_job'
 require 'qs/job'
+require 'qs/payload'
 require 'qs/queue'
 
 module Qs
@@ -50,12 +51,12 @@ module Qs
         self.redis.with{ |c| c.brpop(*args) }
       end
 
-      def append(queue_redis_key, serialized_payload)
-        self.redis.with{ |c| c.lpush(queue_redis_key, serialized_payload) }
+      def append(queue_redis_key, encoded_payload)
+        self.redis.with{ |c| c.lpush(queue_redis_key, encoded_payload) }
       end
 
-      def prepend(queue_redis_key, serialized_payload)
-        self.redis.with{ |c| c.rpush(queue_redis_key, serialized_payload) }
+      def prepend(queue_redis_key, encoded_payload)
+        self.redis.with{ |c| c.rpush(queue_redis_key, encoded_payload) }
       end
 
       def clear(redis_key)
@@ -102,17 +103,17 @@ module Qs
       @redis = HellaRedis::Connection.new(self.redis_config)
     end
 
-    def push(queue_name, payload)
-      queue_redis_key    = Queue::RedisKey.new(queue_name)
-      serialized_payload = Qs.serialize(payload)
-      self.append(queue_redis_key, serialized_payload)
+    def push(queue_name, payload_hash)
+      queue_redis_key = Queue::RedisKey.new(queue_name)
+      encoded_payload = Qs.encode(payload_hash)
+      self.append(queue_redis_key, encoded_payload)
     end
 
     private
 
     def enqueue!(queue, job)
-      serialized_payload = Qs.serialize(job.to_payload)
-      self.append(queue.redis_key, serialized_payload)
+      encoded_payload = Qs::Payload.serialize(job)
+      self.append(queue.redis_key, encoded_payload)
     end
 
   end
@@ -129,11 +130,11 @@ module Qs
       @pushed_items = []
     end
 
-    def push(queue_name, payload)
-      # attempt to serialize (and then throw away) the payload, this will error
-      # on the developer if it can't be serialized
-      Qs.serialize(payload)
-      @pushed_items << PushedItem.new(queue_name, payload)
+    def push(queue_name, payload_hash)
+      # attempt to encode (and then throw away) the payload hash, this will
+      # error on the developer if it can't be encoded
+      Qs.encode(payload_hash)
+      @pushed_items << PushedItem.new(queue_name, payload_hash)
     end
 
     def reset!
@@ -143,13 +144,13 @@ module Qs
     private
 
     def enqueue!(queue, job)
-      # attempt to serialize (and then throw away) the job payload, this will
-      # error on the developer if it can't serialize the job
-      Qs.serialize(job.to_payload)
+      # attempt to serialize (and then throw away) the job, this will error on
+      # the developer if it can't serialize the job
+      Qs::Payload.serialize(job)
       queue.enqueued_jobs << job
     end
 
-    PushedItem = Struct.new(:queue_name, :payload)
+    PushedItem = Struct.new(:queue_name, :payload_hash)
 
   end
 

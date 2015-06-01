@@ -21,7 +21,7 @@ module Qs
 
     should have_imeths :config, :configure, :init, :reset!
     should have_imeths :enqueue, :publish, :push
-    should have_imeths :serialize, :deserialize
+    should have_imeths :encode, :decode
     should have_imeths :sync_subscriptions, :clear_subscriptions
     should have_imeths :client, :redis, :redis_config
     should have_imeths :dispatcher_queue, :dispatcher_job_name
@@ -52,11 +52,11 @@ module Qs
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @module.config.serializer   = proc{ |v| v.to_s }
-      @module.config.deserializer = proc{ |v| v.to_i }
-      @module.config.redis.ip     = Factory.string
-      @module.config.redis.port   = Factory.integer
-      @module.config.redis.db     = Factory.integer
+      @module.config.encoder    = proc{ |v| v.to_s }
+      @module.config.decoder    = proc{ |v| v.to_i }
+      @module.config.redis.ip   = Factory.string
+      @module.config.redis.port = Factory.integer
+      @module.config.redis.db   = Factory.integer
 
       @client_spy = nil
       Assert.stub(Client, :new) do |*args|
@@ -123,15 +123,15 @@ module Qs
       assert_equal payload,    call.payload
     end
 
-    should "use the configured serializer using `serialize`" do
+    should "use the configured encoder using `encode`" do
       value = Factory.integer
-      result = subject.serialize(value)
+      result = subject.encode(value)
       assert_equal value.to_s, result
     end
 
-    should "use the configured deserializer using `deserialize`" do
+    should "use the configured decoder using `decode`" do
       value = Factory.integer.to_s
-      result = subject.deserialize(value)
+      result = subject.decode(value)
       assert_equal value.to_i, result
     end
 
@@ -170,8 +170,8 @@ module Qs
       assert_nil subject.dispatcher_queue
       assert_nil subject.client
       assert_nil subject.redis
-      assert_raises(NoMethodError){ subject.serialize(Factory.integer) }
-      assert_raises(NoMethodError){ subject.deserialize(Factory.integer) }
+      assert_raises(NoMethodError){ subject.encode(Factory.integer) }
+      assert_raises(NoMethodError){ subject.decode(Factory.integer) }
     end
 
   end
@@ -186,7 +186,7 @@ module Qs
     subject{ @config }
 
     should have_options :dispatcher_name, :dispatcher_job_name
-    should have_options :serializer, :deserializer, :timeout
+    should have_options :encoder, :decoder, :timeout
     should have_namespace :redis
 
     should "know its default dispatcher name and job name" do
@@ -194,14 +194,14 @@ module Qs
       assert_equal 'dispatch_event', subject.dispatcher_job_name
     end
 
-    should "know its default serializer/deserializer" do
+    should "know its default decoder/encoder" do
       payload = { Factory.string => Factory.string }
 
       exp = JSON.dump(payload)
-      serialized_payload = subject.serializer.call(payload)
-      assert_equal exp, serialized_payload
+      encoded_payload = subject.encoder.call(payload)
+      assert_equal exp, encoded_payload
       exp = JSON.load(exp)
-      assert_equal exp, subject.deserializer.call(serialized_payload)
+      assert_equal exp, subject.decoder.call(encoded_payload)
     end
 
     should "know its default timeout" do

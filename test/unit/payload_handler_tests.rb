@@ -26,8 +26,8 @@ class Qs::PayloadHandler
         :logger => Qs::NullLogger.new,
         :routes => [@route_spy]
       })
-      serialized_payload = Qs.serialize(@job.to_payload)
-      @redis_item = Qs::RedisItem.new(Factory.string, serialized_payload)
+      encoded_payload = Qs::Payload.serialize(@job)
+      @redis_item = Qs::RedisItem.new(Factory.string, encoded_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
 
@@ -114,11 +114,11 @@ class Qs::PayloadHandler
     should "run an error handler" do
       assert_equal @route_exception, @error_handler_spy.passed_exception
       exp = {
-        :daemon_data        => @daemon_data,
-        :queue_redis_key    => @redis_item.queue_redis_key,
-        :serialized_payload => @redis_item.serialized_payload,
-        :job                => @redis_item.job,
-        :handler_class      => @redis_item.handler_class
+        :daemon_data     => @daemon_data,
+        :queue_redis_key => @redis_item.queue_redis_key,
+        :encoded_payload => @redis_item.encoded_payload,
+        :job             => @redis_item.job,
+        :handler_class   => @redis_item.handler_class
       }
       assert_equal exp, @error_handler_spy.context_hash
       assert_true @error_handler_spy.run_called
