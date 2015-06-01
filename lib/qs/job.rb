@@ -1,25 +1,26 @@
+require 'qs/message'
+
 module Qs
 
-  class Job
+  class Job < Message
 
     PAYLOAD_TYPE = 'job'
 
-    attr_reader :payload_type, :name, :params, :created_at
+    attr_reader :name, :created_at
 
     def initialize(name, params, options = nil)
       options ||= {}
-      options[:type]       = PAYLOAD_TYPE unless options.key?(:type)
-      options[:created_at] = Time.now     unless options.key?(:created_at)
-
+      # TODO - remove once Event doesn't build Job
+      options[:type] = PAYLOAD_TYPE unless options.key?(:type)
       validate!(name, params)
-      @payload_type = options[:type]
-      @name         = name
-      @params       = params
-      @created_at   = options[:created_at]
+      @name       = name
+      @created_at = options[:created_at] || Time.now
+      # TODO - change options[:type] to PAYLOAD_TYPE once Event doesn't build Job
+      super(options[:type], params)
     end
 
     def route_name
-      @route_name ||= RouteName.new(self.payload_type, self.name)
+      self.name
     end
 
     def inspect
@@ -50,12 +51,6 @@ module Qs
         "The job's params are not valid."
       end
       raise(BadJobError, problem) if problem
-    end
-
-    module RouteName
-      def self.new(payload_type, name)
-        "#{payload_type}|#{name}"
-      end
     end
 
   end

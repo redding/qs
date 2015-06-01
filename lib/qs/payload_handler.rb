@@ -32,15 +32,15 @@ module Qs
     def run!(daemon_data, redis_item)
       redis_item.started = true
 
-      job = Qs::Payload.deserialize(redis_item.encoded_payload)
-      log_job(job)
-      redis_item.job = job
+      message = Qs::Payload.deserialize(redis_item.encoded_payload)
+      log_message(message)
+      redis_item.message = message
 
-      route = daemon_data.route_for(job.route_name)
+      route = daemon_data.route_for(message.route_id)
       log_handler_class(route.handler_class)
       redis_item.handler_class = route.handler_class
 
-      route.run(job, daemon_data)
+      route.run(message, daemon_data)
       redis_item.finished = true
     rescue DatWorkerPool::ShutdownError => exception
       if redis_item.started
@@ -58,7 +58,7 @@ module Qs
         :daemon_data     => daemon_data,
         :queue_redis_key => redis_item.queue_redis_key,
         :encoded_payload => redis_item.encoded_payload,
-        :job             => redis_item.job,
+        :message         => redis_item.message,
         :handler_class   => redis_item.handler_class
       }).tap(&:run)
       redis_item.exception = error_handler.exception
@@ -70,12 +70,12 @@ module Qs
     end
 
     def log_received
-      log_verbose "===== Running job ====="
+      log_verbose "===== Received message ====="
     end
 
-    def log_job(job)
-      log_verbose "  Job:     #{job.name.inspect}"
-      log_verbose "  Params:  #{job.params.inspect}"
+    def log_message(message)
+      log_verbose "  Name:    #{message.route_id.inspect}"
+      log_verbose "  Params:  #{message.params.inspect}"
     end
 
     def log_handler_class(handler_class)
@@ -88,9 +88,9 @@ module Qs
         'time'    => redis_item.time_taken,
         'handler' => redis_item.handler_class
       }
-      if (job = redis_item.job)
-        summary_line_args['job']    = job.name
-        summary_line_args['params'] = job.params
+      if (message = redis_item.message)
+        summary_line_args['name']   = message.route_id
+        summary_line_args['params'] = message.params
       end
       if (exception = redis_item.exception)
         summary_line_args['error'] = "#{exception.inspect}"
@@ -122,7 +122,7 @@ module Qs
 
     module SummaryLine
       def self.new(line_attrs)
-        attr_keys = %w{time handler job params error}
+        attr_keys = %w{time handler name params error}
         attr_keys.map{ |k| "#{k}=#{line_attrs[k].inspect}" }.join(' ')
       end
     end

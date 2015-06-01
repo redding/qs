@@ -16,8 +16,8 @@ module Qs
       })
     end
 
-    def self.serialize(job)
-      Qs.encode(self.job_hash(job))
+    def self.serialize(message)
+      Qs.encode(self.job_hash(message))
     end
 
     def self.job_hash(job)

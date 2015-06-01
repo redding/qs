@@ -29,14 +29,14 @@ module Qs
       @routes           = build_routes(args[:routes] || [])
     end
 
-    def route_for(route_name)
-      @routes[route_name] || raise(NotFoundError, "no job named '#{route_name}'")
+    def route_for(route_id)
+      @routes[route_id] || raise(NotFoundError, "unknown message '#{route_id}'")
     end
 
     private
 
     def build_routes(routes)
-      routes.inject({}){ |h, route| h.merge(route.name => route) }
+      routes.inject({}){ |h, route| h.merge(route.id => route) }
     end
 
   end

@@ -11,17 +11,17 @@ class Qs::Route
   class UnitTests < Assert::Context
     desc "Qs::Route"
     setup do
-      @name = Factory.string
+      @id = Factory.string
       @handler_class_name = TestHandler.to_s
-      @route = Qs::Route.new(@name, @handler_class_name)
+      @route = Qs::Route.new(@id, @handler_class_name)
     end
     subject{ @route }
 
-    should have_readers :name, :handler_class_name, :handler_class
+    should have_readers :id, :handler_class_name, :handler_class
     should have_imeths :validate!, :run
 
-    should "know its name and handler class name" do
-      assert_equal @name, subject.name
+    should "know its id and handler class name" do
+      assert_equal @id, subject.id
       assert_equal @handler_class_name, subject.handler_class_name
     end
 

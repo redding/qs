@@ -4,10 +4,10 @@ module Qs
 
   class Route
 
-    attr_reader :name, :handler_class_name, :handler_class
+    attr_reader :id, :handler_class_name, :handler_class
 
-    def initialize(job_route_name, handler_class_name)
-      @name = job_route_name.to_s
+    def initialize(route_id, handler_class_name)
+      @id = route_id.to_s
       @handler_class_name = handler_class_name
       @handler_class = nil
     end

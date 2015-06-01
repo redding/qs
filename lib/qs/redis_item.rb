@@ -4,7 +4,7 @@ module Qs
 
     attr_reader :queue_redis_key, :encoded_payload
     attr_accessor :started, :finished
-    attr_accessor :job, :handler_class
+    attr_accessor :message, :handler_class
     attr_accessor :exception, :time_taken
 
     def initialize(queue_redis_key, encoded_payload)
@@ -13,7 +13,7 @@ module Qs
       @started         = false
       @finished        = false
 
-      @job           = nil
+      @message       = nil
       @handler_class = nil
       @exception     = nil
       @time_taken    = nil

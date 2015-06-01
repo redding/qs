@@ -25,8 +25,8 @@ class AppDaemon
   queue AppQueue
 
   error do |exception, context|
-    job_name = context.job.name if context.job
-    case(job_name)
+    route_name = context.message.route_name if context.message
+    case(route_name)
     when 'error', 'timeout'
       message = "#{exception.class}: #{exception.message}"
       Qs.redis.with{ |c| c.set('last_error', message) }

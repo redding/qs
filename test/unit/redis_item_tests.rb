@@ -16,7 +16,7 @@ class Qs::RedisItem
 
     should have_readers :queue_redis_key, :encoded_payload
     should have_accessors :started, :finished
-    should have_accessors :job, :handler_class
+    should have_accessors :message, :handler_class
     should have_accessors :exception, :time_taken
 
     should "know its queue redis key and encoded payload" do
@@ -28,7 +28,7 @@ class Qs::RedisItem
       assert_false subject.started
       assert_false subject.finished
 
-      assert_nil subject.job
+      assert_nil subject.message
       assert_nil subject.handler_class
       assert_nil subject.exception
       assert_nil subject.time_taken
