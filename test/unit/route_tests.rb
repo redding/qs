@@ -3,7 +3,6 @@ require 'qs/route'
 
 require 'qs/daemon_data'
 require 'qs/logger'
-require 'qs/job'
 require 'test/support/runner_spy'
 
 class Qs::Route
@@ -39,7 +38,7 @@ class Qs::Route
   class RunTests < UnitTests
     desc "when run"
     setup do
-      @job = Qs::Job.new(Factory.string, Factory.string => Factory.string)
+      @message = Factory.message
       @daemon_data = Qs::DaemonData.new(:logger => Qs::NullLogger.new)
 
       @runner_spy = nil
@@ -47,15 +46,15 @@ class Qs::Route
         @runner_spy = RunnerSpy.new(*args)
       end
 
-      @route.run(@job, @daemon_data)
+      @route.run(@message, @daemon_data)
     end
 
     should "build and run a qs runner" do
       assert_not_nil @runner_spy
       assert_equal @route.handler_class, @runner_spy.handler_class
       exp = {
-        :message => @job,
-        :params  => @job.params,
+        :message => @message,
+        :params  => @message.params,
         :logger  => @daemon_data.logger
       }
       assert_equal exp, @runner_spy.args

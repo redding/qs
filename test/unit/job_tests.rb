@@ -1,15 +1,16 @@
 require 'assert'
 require 'qs/job'
 
+require 'qs/message'
+
 class Qs::Job
 
   class UnitTests < Assert::Context
     desc "Qs::Job"
     setup do
-      @payload_type = Factory.string
-      @name         = Factory.string
-      @params       = { Factory.string => Factory.string }
-      @created_at   = Factory.time
+      @name       = Factory.string
+      @params     = { Factory.string => Factory.string }
+      @created_at = Factory.time
 
       @job_class = Qs::Job
     end
@@ -17,6 +18,10 @@ class Qs::Job
 
     should "know its payload type" do
       assert_equal 'job', PAYLOAD_TYPE
+    end
+
+    should "be a message" do
+      assert subject < Qs::Message
     end
 
   end
@@ -27,32 +32,27 @@ class Qs::Job
       @current_time = Factory.time
       Assert.stub(Time, :now).with{ @current_time }
 
-      @job = @job_class.new(@name, @params, {
-        :type       => @payload_type,
-        :created_at => @created_at
-      })
+      @job = @job_class.new(@name, @params, :created_at => @created_at)
     end
     subject{ @job }
 
-    should have_readers :payload_type, :name, :params, :created_at
+    should have_readers :name, :created_at
+    should have_imeths :route_name
 
-    should "know its payload type, name, params and created at" do
-      assert_equal @payload_type, subject.payload_type
+    should "know its attributes" do
+      assert_equal PAYLOAD_TYPE, subject.payload_type
       assert_equal @name,         subject.name
       assert_equal @params,       subject.params
       assert_equal @created_at,   subject.created_at
     end
 
-    should "default its payload type and created at" do
+    should "default its created at to the current time" do
       job = @job_class.new(@name, @params)
-      assert_equal PAYLOAD_TYPE,  job.payload_type
       assert_equal @current_time, job.created_at
     end
 
-    should "raise an error when given an invalid name or params" do
-      assert_raises(Qs::BadJobError){ @job_class.new(nil, @params) }
-      assert_raises(Qs::BadJobError){ @job_class.new(@name, nil) }
-      assert_raises(Qs::BadJobError){ @job_class.new(@name, Factory.string) }
+    should "know its route name" do
+      assert_same subject.name, subject.route_name
     end
 
     should "have a custom inspect" do
@@ -65,33 +65,30 @@ class Qs::Job
     end
 
     should "be comparable" do
-      matching_job = @job_class.new(@name, @params, {
-        :type       => @payload_type,
+      matching = @job_class.new(@name, @params, {
         :created_at => @created_at
       })
-      assert_equal matching_job, subject
+      assert_equal matching, subject
 
-      non_matching_job = @job_class.new(Factory.string, @params, {
-        :type       => @payload_type,
+      non_matching = @job_class.new(Factory.string, @params, {
         :created_at => @created_at
       })
-      assert_not_equal non_matching_job, subject
+      assert_not_equal non_matching, subject
       other_params = { Factory.string => Factory.string }
-      non_matching_job = @job_class.new(@name, other_params, {
-        :type       => @payload_type,
+      non_matching = @job_class.new(@name, other_params, {
         :created_at => @created_at
       })
-      assert_not_equal non_matching_job, subject
-      non_matching_job = @job_class.new(@name, @params, {
-        :type       => Factory.string,
-        :created_at => @created_at
-      })
-      assert_not_equal non_matching_job, subject
-      non_matching_job = @job_class.new(@name, @params, {
-        :type       => @payload_type,
+      assert_not_equal non_matching, subject
+      non_matching = @job_class.new(@name, @params, {
         :created_at => Factory.time
       })
-      assert_not_equal non_matching_job, subject
+      assert_not_equal non_matching, subject
+    end
+
+    should "raise an error when given an invalid attributes" do
+      assert_raises(Qs::BadJobError){ @job_class.new(nil, @params) }
+      assert_raises(Qs::BadJobError){ @job_class.new(@name, nil) }
+      assert_raises(Qs::BadJobError){ @job_class.new(@name, Factory.string) }
     end
 
   end

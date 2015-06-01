@@ -27,8 +27,8 @@ class BenchDaemon
 
   queue BenchQueue
 
-  # if jobs fail notify the bench report so it doesn't hang forever on IO.select
-  error do |exception, daemon_data, job|
+  # if fails notify the bench report so it doesn't hang forever on IO.select
+  error do |exception, context|
     PROGRESS_IO.write_nonblock('F')
   end
 

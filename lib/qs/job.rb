@@ -9,14 +9,11 @@ module Qs
     attr_reader :name, :created_at
 
     def initialize(name, params, options = nil)
-      options ||= {}
-      # TODO - remove once Event doesn't build Job
-      options[:type] = PAYLOAD_TYPE unless options.key?(:type)
       validate!(name, params)
+      options ||= {}
       @name       = name
       @created_at = options[:created_at] || Time.now
-      # TODO - change options[:type] to PAYLOAD_TYPE once Event doesn't build Job
-      super(options[:type], params)
+      super(PAYLOAD_TYPE, params)
     end
 
     def route_name

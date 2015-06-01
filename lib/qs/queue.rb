@@ -5,13 +5,13 @@ module Qs
 
   class Queue
 
-    attr_reader :routes, :event_job_names
+    attr_reader :routes, :event_route_names
     attr_reader :enqueued_jobs
 
     def initialize(&block)
-      @routes          = []
-      @event_job_names = []
-      @enqueued_jobs   = []
+      @routes            = []
+      @event_route_names = []
+      @enqueued_jobs     = []
       self.instance_eval(&block) if !block.nil?
       raise InvalidError, "a queue must have a name" if self.name.nil?
     end
@@ -49,10 +49,10 @@ module Qs
         handler_name = "#{self.event_handler_ns}::#{handler_name}"
       end
 
-      job_name = Qs::Event::JobName.new(channel, name)
-      route_id = Qs::Message::RouteId.new(Qs::Event::PAYLOAD_TYPE, job_name)
+      route_name = Qs::Event::RouteName.new(channel, name)
+      route_id   = Qs::Message::RouteId.new(Qs::Event::PAYLOAD_TYPE, route_name)
 
-      @event_job_names.push(job_name)
+      @event_route_names.push(route_name)
       @routes.push(Qs::Route.new(route_id, handler_name))
     end
 

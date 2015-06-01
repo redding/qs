@@ -16,7 +16,7 @@ module Qs
     end
 
     def event
-      @event ||= Qs::Event.build(
+      @event ||= Qs::Event.new(
         params['event_channel'],
         params['event_name'],
         params['event_params'],

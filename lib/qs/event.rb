@@ -1,46 +1,24 @@
-require 'qs/job'
+require 'qs/message'
 
 module Qs
 
-  class Event
+  class Event < Message
 
     PAYLOAD_TYPE = 'event'
 
-    def self.build(channel, name, params, options = nil)
+    attr_reader :channel, :name, :published_at
+
+    def initialize(channel, name, params, options = nil)
+      validate!(channel, name, params)
       options ||= {}
-      job_name   = Event::JobName.new(channel, name)
-      job_params = {
-        'event_channel' => channel,
-        'event_name'    => name,
-        'event_params'  => params
-      }
-      self.new(Qs::Job.new(job_name, job_params, {
-        :type       => PAYLOAD_TYPE,
-        :created_at => options[:published_at]
-      }))
+      @channel      = channel
+      @name         = name
+      @published_at = options[:published_at] || Time.now
+      super(PAYLOAD_TYPE, params)
     end
 
-    attr_reader :job
-
-    def initialize(job)
-      validate!(job)
-      @job = job
-    end
-
-    def channel
-      @job.params['event_channel']
-    end
-
-    def name
-      @job.params['event_name']
-    end
-
-    def params
-      @job.params['event_params']
-    end
-
-    def published_at
-      @job.created_at
+    def route_name
+      @route_name ||= Event::RouteName.new(self.channel, self.name)
     end
 
     def inspect
@@ -54,7 +32,11 @@ module Qs
 
     def ==(other)
       if other.kind_of?(self.class)
-        self.job == other.job
+        self.payload_type == other.payload_type &&
+        self.channel      == other.channel      &&
+        self.name         == other.name         &&
+        self.params       == other.params       &&
+        self.published_at == other.published_at
       else
         super
       end
@@ -62,26 +44,26 @@ module Qs
 
     private
 
-    def validate!(job)
-      problem = if job.params['event_channel'].to_s.empty?
-        "The job doesn't have an event channel."
-      elsif job.params['event_name'].to_s.empty?
-        "The job doesn't have an event name."
-      elsif !job.params['event_params'].kind_of?(::Hash)
-        "The job's event params are not valid."
+    def validate!(channel, name, params)
+      problem = if channel.to_s.empty?
+        "The event doesn't have a channel."
+      elsif name.to_s.empty?
+        "The event doesn't have a name."
+      elsif !params.kind_of?(::Hash)
+        "The event's params are not valid."
       end
       raise(BadEventError, problem) if problem
     end
 
-    module JobName
+    module RouteName
       def self.new(event_channel, event_name)
         "#{event_channel}:#{event_name}"
       end
     end
 
     module SubscribersRedisKey
-      def self.new(event_job_name)
-        "events:#{event_job_name}:subscribers"
+      def self.new(route_name)
+        "events:#{route_name}:subscribers"
       end
     end
 

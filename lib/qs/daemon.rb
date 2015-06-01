@@ -33,7 +33,7 @@ module Qs
 
       # * Set the size of the client to the max workers + 1. This ensures we
       #   have 1 connection for fetching work from redis and at least 1
-      #   connection for each worker to requeue its job when hard-shutdown.
+      #   connection for each worker to requeue its message when hard-shutdown.
       def initialize
         self.class.configuration.validate!
         Qs.init
@@ -138,8 +138,8 @@ module Qs
       end
 
       # * Shuffle the queue redis keys to avoid queue starvation. Redis will
-      #   pull jobs off queues in the order they are passed to the command, by
-      #   shuffling we ensure they are randomly ordered so every queue should
+      #   pull messages off queues in the order they are passed to the command,
+      #   by shuffling we ensure they are randomly ordered so every queue should
       #   get a chance.
       # * Use 0 for the brpop timeout which means block indefinitely.
       # * Rescue runtime errors so the daemon thread doesn't fail if redis is
@@ -178,7 +178,7 @@ module Qs
           log "Shutting down, waiting for work to finish"
         end
         @worker_pool.shutdown(timeout)
-        log "Requeueing #{@worker_pool.work_items.size} job(s)"
+        log "Requeueing #{@worker_pool.work_items.size} message(s)"
         @worker_pool.work_items.each do |ri|
           @client.prepend(ri.queue_redis_key, ri.encoded_payload)
         end
@@ -204,10 +204,10 @@ module Qs
       def handle_worker_exception(exception, redis_item)
         return if redis_item.nil?
         if !redis_item.started
-          log "Worker error, requeueing job because it hasn't started", :error
+          log "Worker error, requeueing message because it hasn't started", :error
           @client.prepend(redis_item.queue_redis_key, redis_item.encoded_payload)
         else
-          log "Worker error after job was processed, ignoring", :error
+          log "Worker error after message was processed, ignoring", :error
         end
         log "#{exception.class}: #{exception.message}", :error
         log exception.backtrace.join("\n"), :error

@@ -68,8 +68,8 @@ module Qs
       end
 
       def sync_subscriptions(queue)
-        event_subs_keys = queue.event_job_names.map do |event_job_name|
-          Qs::Event::SubscribersRedisKey.new(event_job_name)
+        event_subs_keys = queue.event_route_names.map do |route_name|
+          Qs::Event::SubscribersRedisKey.new(route_name)
         end
         redis_transaction do |c|
           event_subs_keys.each{ |key| c.sadd(key, queue.name) }
