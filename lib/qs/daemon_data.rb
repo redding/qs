@@ -5,7 +5,7 @@ module Qs
     # The daemon uses this to "compile" its configuration for speed. NsOptions
     # is relatively slow everytime an option is read. To avoid this, we read the
     # options one time here and memoize their values. This way, we don't pay the
-    # NsOptions overhead when reading them while handling a job.
+    # NsOptions overhead when reading them while handling a message.
 
     attr_reader :name
     attr_reader :pid_file

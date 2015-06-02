@@ -2,7 +2,7 @@ require 'assert'
 require 'qs/qs_runner'
 
 require 'qs'
-require 'qs/job_handler'
+require 'qs/message_handler'
 
 class Qs::QsRunner
 
@@ -27,7 +27,7 @@ class Qs::QsRunner
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @handler_class = TestJobHandler
+      @handler_class = TestMessageHandler
       @runner = @runner_class.new(@handler_class)
     end
     subject{ @runner }
@@ -36,8 +36,8 @@ class Qs::QsRunner
     should have_imeths :run
 
     should "know its timeout" do
-      assert_equal TestJobHandler.timeout, subject.timeout
-      handler_class = Class.new{ include Qs::JobHandler }
+      assert_equal TestMessageHandler.timeout, subject.timeout
+      handler_class = Class.new{ include Qs::MessageHandler }
       runner = @runner_class.new(handler_class)
       assert_equal Qs.config.timeout, runner.timeout
     end
@@ -131,8 +131,8 @@ class Qs::QsRunner
 
   end
 
-  class TestJobHandler
-    include Qs::JobHandler
+  class TestMessageHandler
+    include Qs::MessageHandler
 
     attr_reader :first_before_call_order, :second_before_call_order
     attr_reader :first_after_call_order, :second_after_call_order

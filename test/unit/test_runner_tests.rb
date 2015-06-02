@@ -163,57 +163,24 @@ class Qs::TestRunner
     desc "when init"
     setup do
       @handler_class = TestEventHandler
-      @args = {
-        :event_channel      => Factory.string,
-        :event_name         => Factory.string,
-        :params             => { Factory.string => Factory.string },
-        :event_published_at => Factory.string
-      }
+      @args = { :event => Factory.event }
       @original_args = @args.dup
       @runner = @runner_class.new(@handler_class, @args)
     end
     subject{ @runner }
 
-    should "know its message and params" do
-      exp_message = Qs::Event.build(
-        @args[:event_channel],
-        @args[:event_name],
-        @args[:params],
-        { :published_at => @args[:event_published_at] }
-      ).job
-      assert_equal exp_message,        subject.message
-      assert_equal exp_message.params, subject.params
+    should "allow passing an event as its message" do
+      assert_equal @args[:event], subject.message
+    end
+
+    should "use event over message if both are provided" do
+      @args[:message] = Factory.message
+      runner = @runner_class.new(@handler_class, @args)
+      assert_equal @args[:event], runner.message
     end
 
     should "not alter the args passed to it" do
       assert_equal @original_args, @args
-    end
-
-    should "allow passing event params instead of params" do
-      @args[:event_params] = @args[:params]
-      @args.delete(:params)
-      runner = @runner_class.new(@handler_class, @args)
-
-      exp_message = Qs::Event.build(
-        @args[:event_channel],
-        @args[:event_name],
-        @args[:event_params],
-        { :published_at => @args[:event_published_at] }
-      ).job
-      assert_equal exp_message,        runner.message
-      assert_equal exp_message.params, runner.params
-    end
-
-    should "default its event channel, name and params" do
-      @args.delete(:event_channel)
-      @args.delete(:event_name)
-      @args.delete(:params)
-      runner = nil
-      assert_nothing_raised{ runner = @runner_class.new(@handler_class, @args) }
-      handler = runner.handler
-      assert_not_nil handler.event.channel
-      assert_not_nil handler.event.name
-      assert_equal({}, handler.event.params)
     end
 
     should "raise an invalid error when not passed an event handler" do
@@ -249,7 +216,6 @@ class Qs::TestRunner
   class TestEventHandler
     include Qs::EventHandler
 
-    public :event
   end
 
 end

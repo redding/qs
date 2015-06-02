@@ -1,4 +1,5 @@
 require 'assert/factory'
+require 'qs/dispatch_job'
 require 'qs/job'
 require 'qs/event'
 
@@ -14,7 +15,7 @@ module Factory
   end
 
   def self.message(params = nil)
-    self.send([:job, :event_job].choice, params)
+    self.send([:job, :event].choice, params)
   end
 
   def self.job(params = nil)
@@ -43,18 +44,18 @@ module Factory
     )
   end
 
-  def self.event_job(params = nil)
+  def self.event(params = nil)
     params ||= {}
     params[:channel]      ||= Factory.string
     params[:name]         ||= Factory.string
     params[:params]       ||= { Factory.string => Factory.string }
     params[:published_at] ||= Factory.time
-    Qs::Event.build(
+    Qs::Event.new(
       params.delete(:channel),
       params.delete(:name),
       params.delete(:params),
       params
-    ).job
+    )
   end
 
 end

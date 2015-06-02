@@ -169,7 +169,7 @@ module Qs::Client
   class SyncSubscriptionsTests < RedisCallTests
     desc "sync_subscriptions"
     setup do
-      Factory.integer(3).times.map{ @queue.event_job_names << Factory.string }
+      Factory.integer(3).times.map{ @queue.event_route_names << Factory.string }
       subject.sync_subscriptions(@queue)
     end
 
@@ -180,9 +180,9 @@ module Qs::Client
 
     should "add the queue to each events subscribers" do
       calls = @connection_spy.redis_calls[2..-1]
-      assert_equal @queue.event_job_names.size, calls.size
+      assert_equal @queue.event_route_names.size, calls.size
       assert_equal [:sadd], calls.map(&:command).uniq
-      exp = @queue.event_job_names.map do |name|
+      exp = @queue.event_route_names.map do |name|
         [Qs::Event::SubscribersRedisKey.new(name), @queue.name]
       end
       assert_equal exp, calls.map(&:args)

@@ -47,7 +47,7 @@ class Qs::DispatchJob
 
     should "know how to build an event from its params" do
       event = subject.event
-      exp = Qs::Event.build(
+      exp = Qs::Event.new(
         @event_channel,
         @event_name,
         @event_params,

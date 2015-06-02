@@ -1,5 +1,4 @@
 require 'qs'
-require 'qs/event'
 require 'qs/event_handler'
 require 'qs/job_handler'
 require 'qs/payload'
@@ -60,16 +59,7 @@ module Qs
       end
 
       args = (args || {}).dup
-      # TODO - change to this once events are a kind of message
-      # args[:message] = args.delete(:event) if args.key?(:event)
-      channel      = args.delete(:event_channel) || 'a-channel'
-      name         = args.delete(:event_name)    || 'a-name'
-      params       = args.delete(:params) || args.delete(:event_params) || {}
-      published_at = args.delete(:event_published_at)
-      args[:message] = Event.build(channel, name, params, {
-        :published_at => published_at
-      }).job
-      args[:params] = args[:message].params
+      args[:message] = args.delete(:event) if args.key?(:event)
       super(handler_class, args)
     end
 

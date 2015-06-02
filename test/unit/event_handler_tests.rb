@@ -28,17 +28,10 @@ module Qs::EventHandler
     subject{ @handler }
 
     should "know its event, channel, name and published at" do
-      event = Qs::Event.new(@runner.message)
-      assert_equal event,              subject.public_event
-      assert_equal event.channel,      subject.public_event_channel
-      assert_equal event.name,         subject.public_event_name
-      assert_equal event.published_at, subject.public_event_published_at
-    end
-
-    # TODO - remove once events are a kind of message
-    should "know its params" do
-      event = Qs::Event.new(@runner.message)
-      assert_equal event.params, subject.public_params
+      assert_equal @runner.message,                   subject.public_event
+      assert_equal subject.public_event.channel,      subject.public_event_channel
+      assert_equal subject.public_event.name,         subject.public_event_name
+      assert_equal subject.public_event.published_at, subject.public_event_published_at
     end
 
     should "have a custom inspect" do
@@ -57,16 +50,13 @@ module Qs::EventHandler
     def public_event_channel;      event_channel;      end
     def public_event_name;         event_name;         end
     def public_event_published_at; event_published_at; end
-
-    # TODO - remove once runners are updated to handle messages
-    def public_params; params; end
   end
 
   class FakeRunner
     attr_accessor :message
 
     def initialize
-      @message = Factory.event_job
+      @message = Factory.event
     end
   end
 

@@ -32,7 +32,7 @@ class Qs::Runner
       assert_instance_of @handler_class, subject.handler
     end
 
-    should "not set its job, params or logger by default" do
+    should "not set its message, params or logger by default" do
       assert_nil subject.message
       assert_equal({}, subject.params)
       assert_instance_of Qs::NullLogger, subject.logger

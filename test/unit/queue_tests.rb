@@ -12,7 +12,7 @@ class Qs::Queue
     end
     subject{ @queue }
 
-    should have_readers :routes, :event_job_names, :enqueued_jobs
+    should have_readers :routes, :event_route_names, :enqueued_jobs
     should have_imeths :name, :redis_key
     should have_imeths :job_handler_ns, :job
     should have_imeths :event_handler_ns, :event
@@ -20,9 +20,9 @@ class Qs::Queue
     should have_imeths :sync_subscriptions, :clear_subscriptions
     should have_imeths :published_events, :reset!
 
-    should "default its routes, event job names and enqueued jobs" do
+    should "default its routes, event route names and enqueued jobs" do
       assert_equal [], subject.routes
-      assert_equal [], subject.event_job_names
+      assert_equal [], subject.event_route_names
       assert_equal [], subject.enqueued_jobs
     end
 
@@ -103,8 +103,8 @@ class Qs::Queue
 
       route = subject.routes.last
       assert_instance_of Qs::Route, route
-      job_name = Qs::Event::JobName.new(event_channel, event_name)
-      exp = Qs::Message::RouteId.new(Qs::Event::PAYLOAD_TYPE, job_name)
+      route_name = Qs::Event::RouteName.new(event_channel, event_name)
+      exp = Qs::Message::RouteId.new(Qs::Event::PAYLOAD_TYPE, route_name)
       assert_equal exp, route.id
       assert_equal handler_name, route.handler_class_name
     end
@@ -136,14 +136,14 @@ class Qs::Queue
       assert_equal handler_name, route.handler_class_name
     end
 
-    should "track its configured event job names" do
+    should "track its configured event route names" do
       event_channel = Factory.string
       event_name    = Factory.string
       handler_name  = Factory.string
       subject.event event_channel, event_name, handler_name
 
-      exp = Qs::Event::JobName.new(event_channel, event_name)
-      assert_equal [exp], subject.event_job_names
+      exp = Qs::Event::RouteName.new(event_channel, event_name)
+      assert_equal [exp], subject.event_route_names
     end
 
     should "return the enqueued jobs events using `published_events`" do
