@@ -40,8 +40,8 @@ module Qs
         handler_name = "#{self.job_handler_ns}::#{handler_name}"
       end
 
-      route_name = Qs::Job::RouteName.new(Qs::Job::PAYLOAD_TYPE, name)
-      @routes.push(Qs::Route.new(route_name, handler_name))
+      route_id = Message::RouteId.new(Qs::Job::PAYLOAD_TYPE, name)
+      @routes.push(Qs::Route.new(route_id, handler_name))
     end
 
     def event(channel, name, handler_name)
@@ -50,10 +50,10 @@ module Qs
       end
 
       job_name = Qs::Event::JobName.new(channel, name)
-      route_name = Qs::Job::RouteName.new(Qs::Event::PAYLOAD_TYPE, job_name)
+      route_id = Qs::Message::RouteId.new(Qs::Event::PAYLOAD_TYPE, job_name)
 
       @event_job_names.push(job_name)
-      @routes.push(Qs::Route.new(route_name, handler_name))
+      @routes.push(Qs::Route.new(route_id, handler_name))
     end
 
     def enqueue(job_name, params = nil)

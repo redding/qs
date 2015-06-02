@@ -13,6 +13,10 @@ module Factory
     exception
   end
 
+  def self.message(params = nil)
+    self.send([:job, :event_job].choice, params)
+  end
+
   def self.job(params = nil)
     params ||= {}
     params[:name]       ||= Factory.string

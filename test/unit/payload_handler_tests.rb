@@ -2,7 +2,6 @@ require 'assert'
 require 'qs/payload_handler'
 
 require 'qs/daemon_data'
-require 'qs/job'
 require 'qs/redis_item'
 
 class Qs::PayloadHandler
@@ -20,13 +19,13 @@ class Qs::PayloadHandler
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @job = Factory.job
-      @route_spy = RouteSpy.new(@job.route_name)
+      @message     = Factory.message
+      @route_spy   = RouteSpy.new(@message.route_id)
       @daemon_data = Qs::DaemonData.new({
         :logger => Qs::NullLogger.new,
         :routes => [@route_spy]
       })
-      encoded_payload = Qs::Payload.serialize(@job)
+      encoded_payload = Qs::Payload.serialize(@message)
       @redis_item = Qs::RedisItem.new(Factory.string, encoded_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
@@ -56,12 +55,12 @@ class Qs::PayloadHandler
 
     should "run a route for the redis item" do
       assert_true @route_spy.run_called
-      assert_equal @job, @route_spy.job_passed_to_run
+      assert_equal @message, @route_spy.message_passed_to_run
       assert_equal @daemon_data, @route_spy.daemon_data_passed_to_run
     end
 
     should "build up its redis item as it processes it" do
-      assert_equal @job, @redis_item.job
+      assert_equal @message, @redis_item.message
       assert_equal @route_spy.handler_class, @redis_item.handler_class
       assert_nil @redis_item.exception
       assert_instance_of Float, @redis_item.time_taken
@@ -69,26 +68,26 @@ class Qs::PayloadHandler
 
     should "log its processing of the redis item" do
       logger_spy = subject.logger
-      expected = "[Qs] ===== Running job ====="
-      assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs]   Job:     #{@redis_item.job.name.inspect}"
-      assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs]   Params:  #{@redis_item.job.params.inspect}"
-      assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs]   Handler: #{@redis_item.handler_class}"
-      assert_includes expected, logger_spy.verbose.info_logged
-      expected = "[Qs] ===== Completed in #{@redis_item.time_taken}ms ====="
-      assert_includes expected, logger_spy.verbose.info_logged
+      exp = "[Qs] ===== Received message ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Name:    #{@redis_item.message.route_id.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Params:  #{@redis_item.message.params.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Handler: #{@redis_item.handler_class}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs] ===== Completed in #{@redis_item.time_taken}ms ====="
+      assert_includes exp, logger_spy.verbose.info_logged
       assert_empty logger_spy.verbose.error_logged
 
-      expected = SummaryLine.new({
+      exp = SummaryLine.new({
         'time'    => @redis_item.time_taken,
         'handler' => @redis_item.handler_class,
-        'job'     => @redis_item.job.name,
-        'params'  => @redis_item.job.params
+        'name'    => @redis_item.message.route_id,
+        'params'  => @redis_item.message.params
       })
       assert_equal 1, logger_spy.summary.info_logged.size
-      assert_equal "[Qs] #{expected}", logger_spy.summary.info_logged.first
+      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
       assert_empty logger_spy.summary.error_logged
     end
 
@@ -117,7 +116,7 @@ class Qs::PayloadHandler
         :daemon_data     => @daemon_data,
         :queue_redis_key => @redis_item.queue_redis_key,
         :encoded_payload => @redis_item.encoded_payload,
-        :job             => @redis_item.job,
+        :message         => @redis_item.message,
         :handler_class   => @redis_item.handler_class
       }
       assert_equal exp, @error_handler_spy.context_hash
@@ -190,7 +189,7 @@ class Qs::PayloadHandler
       @attrs = {
         'time'    => Factory.string,
         'handler' => Factory.string,
-        'job'     => Factory.string,
+        'name'    => Factory.string,
         'params'  => Factory.string,
         'error'   => Factory.string
       }
@@ -201,7 +200,7 @@ class Qs::PayloadHandler
     should "build a string of all the attributes ordered with their values" do
       expected = "time=#{@attrs['time'].inspect} " \
                  "handler=#{@attrs['handler'].inspect} " \
-                 "job=#{@attrs['job'].inspect} " \
+                 "name=#{@attrs['name'].inspect} " \
                  "params=#{@attrs['params'].inspect} " \
                  "error=#{@attrs['error'].inspect}"
       assert_equal expected, subject
@@ -210,13 +209,13 @@ class Qs::PayloadHandler
   end
 
   class RouteSpy
-    attr_reader :name
-    attr_reader :job_passed_to_run, :daemon_data_passed_to_run
+    attr_reader :id
+    attr_reader :message_passed_to_run, :daemon_data_passed_to_run
     attr_reader :run_called
 
-    def initialize(job_route_name)
-      @name = job_route_name
-      @job_passed_to_run = nil
+    def initialize(message_route_id)
+      @id = message_route_id
+      @message_passed_to_run = nil
       @daemon_data_passed_to_run = nil
       @run_called = false
     end
@@ -225,8 +224,8 @@ class Qs::PayloadHandler
       TestHandler
     end
 
-    def run(job, daemon_data)
-      @job_passed_to_run = job
+    def run(message, daemon_data)
+      @message_passed_to_run = message
       @daemon_data_passed_to_run = daemon_data
       @run_called = true
     end

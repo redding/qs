@@ -59,14 +59,14 @@ class Qs::DaemonData
     end
 
     should "build a routes lookup hash" do
-      expected = @routes.inject({}){ |h, r| h.merge(r.name => r) }
+      expected = @routes.inject({}){ |h, r| h.merge(r.id => r) }
       assert_equal expected, subject.routes
     end
 
     should "allow looking up a route using `route_for`" do
-      expected = @routes.choice
-      route = subject.route_for(expected.name)
-      assert_equal expected, route
+      exp_route = @routes.choice
+      route = subject.route_for(exp_route.id)
+      assert_equal exp_route, route
     end
 
     should "raise a not found error using `route_for` with an invalid name" do

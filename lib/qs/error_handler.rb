@@ -32,13 +32,13 @@ module Qs
   class ErrorContext
     attr_reader :daemon_data
     attr_reader :queue_name, :encoded_payload
-    attr_reader :job, :handler_class
+    attr_reader :message, :handler_class
 
     def initialize(args)
       @daemon_data     = args[:daemon_data]
       @queue_name      = Queue::RedisKey.parse_name(args[:queue_redis_key].to_s)
       @encoded_payload = args[:encoded_payload]
-      @job             = args[:job]
+      @message         = args[:message]
       @handler_class   = args[:handler_class]
     end
 
@@ -47,7 +47,7 @@ module Qs
         self.daemon_data     == other.daemon_data &&
         self.queue_name      == other.queue_name &&
         self.encoded_payload == other.encoded_payload &&
-        self.job             == other.job &&
+        self.message         == other.message &&
         self.handler_class   == other.handler_class
       else
         super

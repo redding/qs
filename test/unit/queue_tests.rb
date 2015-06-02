@@ -65,8 +65,8 @@ class Qs::Queue
 
       route = subject.routes.last
       assert_instance_of Qs::Route, route
-      exp = Qs::Job::RouteName.new(Qs::Job::PAYLOAD_TYPE, job_name)
-      assert_equal exp, route.name
+      exp = Qs::Message::RouteId.new(Qs::Job::PAYLOAD_TYPE, job_name)
+      assert_equal exp, route.id
       assert_equal handler_name, route.handler_class_name
     end
 
@@ -104,8 +104,8 @@ class Qs::Queue
       route = subject.routes.last
       assert_instance_of Qs::Route, route
       job_name = Qs::Event::JobName.new(event_channel, event_name)
-      exp = Qs::Job::RouteName.new(Qs::Event::PAYLOAD_TYPE, job_name)
-      assert_equal exp, route.name
+      exp = Qs::Message::RouteId.new(Qs::Event::PAYLOAD_TYPE, job_name)
+      assert_equal exp, route.id
       assert_equal handler_name, route.handler_class_name
     end
 

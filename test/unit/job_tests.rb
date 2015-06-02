@@ -35,7 +35,6 @@ class Qs::Job
     subject{ @job }
 
     should have_readers :payload_type, :name, :params, :created_at
-    should have_imeths :route_name
 
     should "know its payload type, name, params and created at" do
       assert_equal @payload_type, subject.payload_type
@@ -96,20 +95,5 @@ class Qs::Job
     end
 
   end
-
-  class RouteNameTests < UnitTests
-    desc "RouteName"
-    subject{ RouteName }
-
-    should have_imeths :new
-
-    should "build a route name given a payload type and name" do
-      exp = "#{@payload_type}|#{@name}"
-      assert_equal exp, RouteName.new(@payload_type, @name)
-    end
-
-  end
-
-
 
 end
