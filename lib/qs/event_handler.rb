@@ -1,5 +1,5 @@
 require 'qs/event'
-require 'qs/job_handler'
+require 'qs/message_handler'
 
 module Qs
 
@@ -7,6 +7,8 @@ module Qs
 
     def self.included(klass)
       klass.class_eval do
+        include Qs::MessageHandler
+        # TODO - remove once runners are updated to handle messages
         include Qs::JobHandler
         include InstanceMethods
       end
@@ -28,7 +30,12 @@ module Qs
 
       # Helpers
 
-      def event;  @qs_event;        end
+      def event;              @qs_event;          end
+      def event_channel;      event.channel;      end
+      def event_name;         event.name;         end
+      def event_published_at; event.published_at; end
+
+      # TODO - remove once runners are updated to handle messages
       def params; @qs_event.params; end
 
     end
