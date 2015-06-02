@@ -3,6 +3,7 @@ require 'qs/event_handler'
 
 require 'qs/event'
 require 'qs/job_handler'
+require 'qs/message_handler'
 
 module Qs::EventHandler
 
@@ -12,6 +13,10 @@ module Qs::EventHandler
       @handler_class = Class.new{ include Qs::EventHandler }
     end
     subject{ @handler_class }
+
+    should "be a message handler" do
+      assert_includes Qs::MessageHandler, subject
+    end
 
     should "be a job handler" do
       assert_includes Qs::JobHandler, subject
@@ -27,9 +32,17 @@ module Qs::EventHandler
     end
     subject{ @handler }
 
-    should "know its event and params" do
+    should "know its event, channel, name and published at" do
       event = Qs::Event.new(@runner.job)
-      assert_equal event,        subject.public_event
+      assert_equal event,              subject.public_event
+      assert_equal event.channel,      subject.public_event_channel
+      assert_equal event.name,         subject.public_event_name
+      assert_equal event.published_at, subject.public_event_published_at
+    end
+
+    # TODO - remove once runners are updated to handle messages
+    should "know its params" do
+      event = Qs::Event.new(@runner.job)
       assert_equal event.params, subject.public_params
     end
 
@@ -45,8 +58,13 @@ module Qs::EventHandler
   class TestEventHandler
     include Qs::EventHandler
 
+    def public_event;              event;              end
+    def public_event_channel;      event_channel;      end
+    def public_event_name;         event_name;         end
+    def public_event_published_at; event_published_at; end
+
+    # TODO - remove once runners are updated to handle messages
     def public_params; params; end
-    def public_event;  event;  end
   end
 
   class FakeRunner
