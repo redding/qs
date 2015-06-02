@@ -2,7 +2,7 @@ require 'assert'
 require 'qs/job_handler_test_helpers'
 
 require 'qs/job_handler'
-require 'qs/job_test_runner'
+require 'qs/test_runner'
 require 'test/support/runner_spy'
 
 module Qs::JobHandler::TestHelpers

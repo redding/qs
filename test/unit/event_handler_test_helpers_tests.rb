@@ -2,7 +2,7 @@ require 'assert'
 require 'qs/event_handler_test_helpers'
 
 require 'qs/event_handler'
-require 'qs/job_test_runner'
+require 'qs/test_runner'
 require 'test/support/runner_spy'
 
 module Qs::EventHandler::TestHelpers

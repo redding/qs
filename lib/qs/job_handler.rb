@@ -22,9 +22,9 @@ module Qs
 
       # Helpers
 
-      def job;            @qs_runner.job; end
-      def job_name;       job.name;       end
-      def job_created_at; job.created_at; end
+      def job;            @qs_runner.message; end
+      def job_name;       job.name;           end
+      def job_created_at; job.created_at;     end
 
     end
 

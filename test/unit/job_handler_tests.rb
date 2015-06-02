@@ -27,9 +27,9 @@ module Qs::JobHandler
     subject{ @handler }
 
     should "know its job, job name and job created at" do
-      assert_equal @runner.job,            subject.public_job
-      assert_equal @runner.job.name,       subject.public_job_name
-      assert_equal @runner.job.created_at, subject.public_job_created_at
+      assert_equal @runner.message,               subject.public_job
+      assert_equal subject.public_job.name,       subject.public_job_name
+      assert_equal subject.public_job.created_at, subject.public_job_created_at
     end
 
     should "have a custom inspect" do
@@ -50,10 +50,10 @@ module Qs::JobHandler
   end
 
   class FakeRunner
-    attr_accessor :job
+    attr_accessor :message
 
     def initialize
-      @job = Factory.job
+      @message = Factory.job
     end
   end
 

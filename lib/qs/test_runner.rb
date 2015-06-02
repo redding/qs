@@ -7,19 +7,14 @@ require 'qs/runner'
 
 module Qs
 
-  class JobTestRunner < Runner
+  class TestRunner < Runner
 
     def initialize(handler_class, args = nil)
-      if !handler_class.include?(Qs::JobHandler)
-        raise InvalidJobHandlerError, "#{handler_class.inspect} is not a"\
-                                      " Qs::JobHandler"
-      end
-
       args = (args || {}).dup
       super(handler_class, {
-        :job    => args.delete(:job),
-        :params => normalize_params(args.delete(:params) || {}),
-        :logger => args.delete(:logger)
+        :message => args.delete(:message),
+        :params  => normalize_params(args.delete(:params) || {}),
+        :logger  => args.delete(:logger)
       })
       args.each{ |key, value| self.handler.send("#{key}=", value) }
 
@@ -41,7 +36,22 @@ module Qs
 
   end
 
-  class EventTestRunner < JobTestRunner
+  class JobTestRunner < TestRunner
+
+    def initialize(handler_class, args = nil)
+      if !handler_class.include?(Qs::JobHandler)
+        raise InvalidJobHandlerError, "#{handler_class.inspect} is not a"\
+                                      " Qs::JobHandler"
+      end
+
+      args = (args || {}).dup
+      args[:message] = args.delete(:job) if args.key?(:job)
+      super(handler_class, args)
+    end
+
+  end
+
+  class EventTestRunner < TestRunner
 
     def initialize(handler_class, args = nil)
       if !handler_class.include?(Qs::EventHandler)
@@ -49,16 +59,17 @@ module Qs
                                       " Qs::EventHandler"
       end
 
-      args         = (args || {}).dup
+      args = (args || {}).dup
+      # TODO - change to this once events are a kind of message
+      # args[:message] = args.delete(:event) if args.key?(:event)
       channel      = args.delete(:event_channel) || 'a-channel'
       name         = args.delete(:event_name)    || 'a-name'
       params       = args.delete(:params) || args.delete(:event_params) || {}
       published_at = args.delete(:event_published_at)
-
-      args[:job] = Event.build(channel, name, params, {
+      args[:message] = Event.build(channel, name, params, {
         :published_at => published_at
       }).job
-      args[:params] = args[:job].params
+      args[:params] = args[:message].params
       super(handler_class, args)
     end
 

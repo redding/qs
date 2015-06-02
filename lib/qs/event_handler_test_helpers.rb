@@ -1,4 +1,4 @@
-require 'qs/job_test_runner'
+require 'qs/test_runner'
 
 module Qs::EventHandler
 
