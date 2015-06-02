@@ -8,8 +8,6 @@ module Qs
     def self.included(klass)
       klass.class_eval do
         include Qs::MessageHandler
-        # TODO - remove once runners are updated to handle messages
-        include Qs::JobHandler
         include InstanceMethods
       end
     end
@@ -18,7 +16,8 @@ module Qs
 
       def initialize(*args)
         super
-        @qs_event = Event.new(@qs_runner.job)
+        # TODO - remove once events are a kind of message
+        @qs_event = Event.new(@qs_runner.message)
       end
 
       def inspect
@@ -35,7 +34,7 @@ module Qs
       def event_name;         event.name;         end
       def event_published_at; event.published_at; end
 
-      # TODO - remove once runners are updated to handle messages
+      # TODO - remove once events are a kind of message
       def params; @qs_event.params; end
 
     end

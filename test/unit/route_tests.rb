@@ -53,12 +53,12 @@ class Qs::Route
     should "build and run a qs runner" do
       assert_not_nil @runner_spy
       assert_equal @route.handler_class, @runner_spy.handler_class
-      expected = {
-        :job    => @job,
-        :params => @job.params,
-        :logger => @daemon_data.logger
+      exp = {
+        :message => @job,
+        :params  => @job.params,
+        :logger  => @daemon_data.logger
       }
-      assert_equal expected, @runner_spy.args
+      assert_equal exp, @runner_spy.args
       assert_true @runner_spy.run_called
     end
 

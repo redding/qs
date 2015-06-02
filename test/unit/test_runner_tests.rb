@@ -1,16 +1,16 @@
 require 'assert'
-require 'qs/job_test_runner'
+require 'qs/test_runner'
 
 require 'qs'
 require 'qs/event'
 
-class Qs::JobTestRunner
+class Qs::TestRunner
 
   class UnitTests < Assert::Context
-    desc "Qs::JobTestRunner"
+    desc "Qs::TestRunner"
     setup do
       Qs.init
-      @runner_class = Qs::JobTestRunner
+      @runner_class = Qs::TestRunner
     end
     teardown do
       Qs.reset!
@@ -26,12 +26,12 @@ class Qs::JobTestRunner
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @handler_class = TestJobHandler
+      @handler_class = TestMessageHandler
       @args = {
-        :job    => Factory.string,
-        :params => { Factory.string => Factory.string },
-        :logger => Factory.string,
-        :flag   => Factory.boolean
+        :message => Factory.message,
+        :params  => { Factory.string => Factory.string },
+        :logger  => Factory.string,
+        :flag    => Factory.boolean
       }
       @original_args = @args.dup
       @runner  = @runner_class.new(@handler_class, @args)
@@ -41,13 +41,13 @@ class Qs::JobTestRunner
 
     should have_imeths :run
 
-    should "know its job, params and logger" do
-      assert_equal @args[:job], subject.job
-      assert_equal @args[:params], subject.params
-      assert_equal @args[:logger], subject.logger
+    should "know its message, params and logger" do
+      assert_equal @args[:message], subject.message
+      assert_equal @args[:params],  subject.params
+      assert_equal @args[:logger],  subject.logger
     end
 
-    should "write extra args to its job handler" do
+    should "write extra args to its message handler" do
       assert_equal @args[:flag], @handler.flag
     end
 
@@ -55,19 +55,19 @@ class Qs::JobTestRunner
       assert_equal @original_args, @args
     end
 
-    should "not call its job handler's before callbacks" do
+    should "not call its message handler's before callbacks" do
       assert_nil @handler.before_called
     end
 
-    should "call its job handler's init" do
+    should "call its message handler's init" do
       assert_true @handler.init_called
     end
 
-    should "not run its job handler" do
+    should "not run its message handler" do
       assert_nil @handler.run_called
     end
 
-    should "not call its job handler's after callbacks" do
+    should "not call its message handler's after callbacks" do
       assert_nil @handler.after_called
     end
 
@@ -85,10 +85,6 @@ class Qs::JobTestRunner
       assert_equal exp, runner.params
     end
 
-    should "raise an invalid error when not passed a job handler" do
-      assert_raises(Qs::InvalidJobHandlerError){ @runner_class.new(Class.new) }
-    end
-
   end
 
   class RunTests < InitTests
@@ -97,12 +93,55 @@ class Qs::JobTestRunner
       @runner.run
     end
 
-    should "run its job handler" do
+    should "run its message handler" do
       assert_true @handler.run_called
     end
 
-    should "not call its job handler's after callbacks" do
+    should "not call its message handler's after callbacks" do
       assert_nil @handler.after_called
+    end
+
+  end
+
+  class JobTestRunnerTests < UnitTests
+    desc "JobTestRunner"
+    setup do
+      @runner_class = Qs::JobTestRunner
+    end
+    subject{ @runner_class }
+
+    should "be a test runner" do
+      assert_true subject < Qs::TestRunner
+    end
+
+  end
+
+  class JobTestRunnerInitTests < JobTestRunnerTests
+    desc "when init"
+    setup do
+      @handler_class = TestJobHandler
+      @args = { :job => Factory.job }
+      @original_args = @args.dup
+      @runner = @runner_class.new(@handler_class, @args)
+    end
+    subject{ @runner }
+
+    should "allow passing a job as its message" do
+      assert_equal @args[:job], subject.message
+    end
+
+    should "use job over message if both are provided" do
+      @args[:message] = Factory.message
+      runner = @runner_class.new(@handler_class, @args)
+      assert_equal @args[:job], runner.message
+    end
+
+    should "not alter the args passed to it" do
+      assert_equal @original_args, @args
+    end
+
+    should "raise an invalid error when not passed a job handler" do
+      assert_raises(Qs::InvalidJobHandlerError){ @runner_class.new(Class.new) }
     end
 
   end
@@ -114,8 +153,8 @@ class Qs::JobTestRunner
     end
     subject{ @runner_class }
 
-    should "be a job test runner" do
-      assert_true subject < Qs::JobTestRunner
+    should "be a test runner" do
+      assert_true subject < Qs::TestRunner
     end
 
   end
@@ -135,15 +174,15 @@ class Qs::JobTestRunner
     end
     subject{ @runner }
 
-    should "know its job and params" do
-      exp_job = Qs::Event.build(
+    should "know its message and params" do
+      exp_message = Qs::Event.build(
         @args[:event_channel],
         @args[:event_name],
         @args[:params],
         { :published_at => @args[:event_published_at] }
       ).job
-      assert_equal exp_job,        subject.job
-      assert_equal exp_job.params, subject.params
+      assert_equal exp_message,        subject.message
+      assert_equal exp_message.params, subject.params
     end
 
     should "not alter the args passed to it" do
@@ -155,14 +194,14 @@ class Qs::JobTestRunner
       @args.delete(:params)
       runner = @runner_class.new(@handler_class, @args)
 
-      exp_job = Qs::Event.build(
+      exp_message = Qs::Event.build(
         @args[:event_channel],
         @args[:event_name],
         @args[:event_params],
         { :published_at => @args[:event_published_at] }
       ).job
-      assert_equal exp_job,        runner.job
-      assert_equal exp_job.params, runner.params
+      assert_equal exp_message,        runner.message
+      assert_equal exp_message.params, runner.params
     end
 
     should "default its event channel, name and params" do
@@ -177,10 +216,14 @@ class Qs::JobTestRunner
       assert_equal({}, handler.event.params)
     end
 
+    should "raise an invalid error when not passed an event handler" do
+      assert_raises(Qs::InvalidEventHandlerError){ @runner_class.new(Class.new) }
+    end
+
   end
 
-  class TestJobHandler
-    include Qs::JobHandler
+  class TestMessageHandler
+    include Qs::MessageHandler
 
     attr_reader :before_called, :after_called
     attr_reader :init_called, :run_called
@@ -196,6 +239,11 @@ class Qs::JobTestRunner
     def run!
       @run_called = true
     end
+  end
+
+  class TestJobHandler
+    include Qs::JobHandler
+
   end
 
   class TestEventHandler

@@ -24,7 +24,7 @@ class Qs::Runner
     subject{ @runner }
 
     should have_readers :handler_class, :handler
-    should have_readers :job, :params, :logger
+    should have_readers :message, :params, :logger
     should have_imeths :run
 
     should "know its handler class and handler" do
@@ -33,21 +33,21 @@ class Qs::Runner
     end
 
     should "not set its job, params or logger by default" do
-      assert_nil subject.job
+      assert_nil subject.message
       assert_equal({}, subject.params)
       assert_instance_of Qs::NullLogger, subject.logger
     end
 
-    should "allow passing a job, params and logger" do
+    should "allow passing a message, params and logger" do
       args = {
-        :job    => Factory.string,
-        :params => Factory.string,
-        :logger => Factory.string
+        :message => Factory.string,
+        :params  => Factory.string,
+        :logger  => Factory.string
       }
       runner = @runner_class.new(@handler_class, args)
-      assert_equal args[:job],    runner.job
-      assert_equal args[:params], runner.params
-      assert_equal args[:logger], runner.logger
+      assert_equal args[:message], runner.message
+      assert_equal args[:params],  runner.params
+      assert_equal args[:logger],  runner.logger
     end
 
     should "raise a not implemented error when run" do
