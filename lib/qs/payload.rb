@@ -38,7 +38,8 @@ module Qs
         payload_hash['channel'],
         payload_hash['name'],
         payload_hash['params'],
-        { :published_at => Timestamp.to_time(payload_hash['published_at']) }
+        { :publisher    => payload_hash['publisher'],
+          :published_at => Timestamp.to_time(payload_hash['published_at']) }
       )
     end
 
@@ -46,6 +47,7 @@ module Qs
       self.message_hash(event, {
         'channel'      => event.channel.to_s,
         'name'         => event.name.to_s,
+        'publisher'    => event.publisher.to_s,
         'published_at' => Timestamp.new(event.published_at)
       })
     end

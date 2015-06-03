@@ -38,9 +38,11 @@ module Qs
       end
 
       def publish(channel, name, params = nil)
-        dispatch_job = DispatchJob.new(channel, name, params || {})
-        enqueue!(Qs.dispatcher_queue, dispatch_job)
-        dispatch_job.event
+        publish!(channel, name, params)
+      end
+
+      def publish_as(publisher, channel, name, params = nil)
+        publish!(channel, name, params, :event_publisher => publisher)
       end
 
       def push(queue_name, payload)
@@ -86,6 +88,12 @@ module Qs
       end
 
       private
+
+      def publish!(channel, name, params = nil, options = nil)
+        dispatch_job = DispatchJob.new(channel, name, params || {}, options)
+        enqueue!(Qs.dispatcher_queue, dispatch_job)
+        dispatch_job.event
+      end
 
       def redis_transaction
         self.redis.with{ |c| c.pipelined{ c.multi{ yield c } } }

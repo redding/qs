@@ -48,7 +48,7 @@ module Qs::Client
     subject{ @client }
 
     should have_readers :redis_config, :redis
-    should have_imeths :enqueue, :push
+    should have_imeths :enqueue, :publish, :publish_as, :push
     should have_imeths :block_dequeue
     should have_imeths :append, :prepend
     should have_imeths :clear
@@ -77,7 +77,7 @@ module Qs::Client
       assert_equal({}, call.job.params)
     end
 
-    should "build a dispatch job, enqueue it and return its event using `publish`" do
+    should "enqueue a dispatch job and return its event using `publish`" do
       event_channel = Factory.string
       event_name    = Factory.string
       event_params  = @job_params
@@ -103,6 +103,27 @@ module Qs::Client
 
       call = subject.enqueue_calls.last
       assert_equal({}, call.job.params['event_params'])
+    end
+
+    should "enqueue a dispatch job with a custom publisher using `publish_as`" do
+      publisher = Factory.string
+      channel   = Factory.string
+      name      = Factory.string
+      params    = @job_params
+      result = subject.publish_as(publisher, channel, name, params)
+
+      call = subject.enqueue_calls.last
+      assert_equal Qs.dispatcher_queue, call.queue
+
+      dispatch_job = Factory.dispatch_job({
+        :event_channel   => channel,
+        :event_name      => name,
+        :event_params    => params,
+        :event_publisher => publisher
+      })
+      assert_equal dispatch_job.name,   call.job.name
+      assert_equal dispatch_job.params, call.job.params
+      assert_equal call.job.event,      result
     end
 
     should "raise a not implemented error using `push`" do

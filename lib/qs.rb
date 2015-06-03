@@ -49,6 +49,10 @@ module Qs
     @client.publish(channel, name, params)
   end
 
+  def self.publish_as(publisher, channel, name, params = nil)
+    @client.publish_as(publisher, channel, name, params)
+  end
+
   def self.push(queue_name, payload)
     @client.push(queue_name, payload)
   end
@@ -89,6 +93,10 @@ module Qs
     self.config.dispatcher_job_name
   end
 
+  def self.event_publisher
+    self.config.event_publisher
+  end
+
   def self.published_events
     self.dispatcher_queue.published_events
   end
@@ -98,6 +106,7 @@ module Qs
 
     option :dispatcher_name,     String, :default => 'dispatcher'
     option :dispatcher_job_name, String, :default => 'dispatch_event'
+    option :event_publisher,     String
 
     option :encoder, Proc, :default => proc{ |p| ::JSON.dump(p) }
     option :decoder, Proc, :default => proc{ |p| ::JSON.load(p) }
