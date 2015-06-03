@@ -21,7 +21,8 @@ module Qs
     end
 
     def self.job(payload_hash)
-      Qs::Job.new(payload_hash['name'], payload_hash['params'], {
+      Qs::Job.new(payload_hash['name'], {
+        :params     => payload_hash['params'],
         :created_at => Timestamp.to_time(payload_hash['created_at'])
       })
     end
@@ -34,13 +35,11 @@ module Qs
     end
 
     def self.event(payload_hash)
-      Qs::Event.new(
-        payload_hash['channel'],
-        payload_hash['name'],
-        payload_hash['params'],
-        { :publisher    => payload_hash['publisher'],
-          :published_at => Timestamp.to_time(payload_hash['published_at']) }
-      )
+      Qs::Event.new(payload_hash['channel'], payload_hash['name'], {
+        :params       => payload_hash['params'],
+        :publisher    => payload_hash['publisher'],
+        :published_at => Timestamp.to_time(payload_hash['published_at'])
+      })
     end
 
     def self.event_hash(event)

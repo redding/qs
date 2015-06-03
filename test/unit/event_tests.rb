@@ -34,7 +34,8 @@ class Qs::Event
       @current_time = Factory.time
       Assert.stub(Time, :now).with{ @current_time }
 
-      @event = @event_class.new(@channel, @name, @params, {
+      @event = @event_class.new(@channel, @name, {
+        :params       => @params,
         :publisher    => @publisher,
         :published_at => @published_at
       })
@@ -53,8 +54,9 @@ class Qs::Event
       assert_equal @published_at, subject.published_at
     end
 
-    should "default its published at to the current time" do
-      event = @event_class.new(@channel, @name, @params)
+    should "default its params and published at to the current time" do
+      event = @event_class.new(@channel, @name)
+      assert_equal({}, event.params)
       assert_equal @current_time, event.published_at
     end
 
@@ -77,34 +79,39 @@ class Qs::Event
     end
 
     should "be comparable" do
-      matching = @event_class.new(@channel, @name, @params, {
+      matching = @event_class.new(@channel, @name, {
+        :params       => @params,
         :publisher    => @publisher,
         :published_at => @published_at
       })
       assert_equal matching, subject
 
-      non_matching = @event_class.new(Factory.string, @name, @params, {
+      non_matching = @event_class.new(Factory.string, @name, {
+        :params       => @params,
         :publisher    => @publisher,
         :published_at => @published_at
       })
       assert_not_equal non_matching, subject
-      non_matching = @event_class.new(@channel, Factory.string, @params, {
+      non_matching = @event_class.new(@channel, Factory.string, {
+        :params       => @params,
         :publisher    => @publisher,
         :published_at => @published_at
       })
       assert_not_equal non_matching, subject
-      other_params = { Factory.string => Factory.string }
-      non_matching = @event_class.new(@channel, @name, other_params, {
+      non_matching = @event_class.new(@channel, @name, {
+        :params       => { Factory.string => Factory.string },
         :publisher    => @publisher,
         :published_at => @published_at
       })
       assert_not_equal non_matching, subject
-      non_matching = @event_class.new(@channel, @name, @params, {
+      non_matching = @event_class.new(@channel, @name, {
+        :params       => @params,
         :publisher    => Factory.string,
         :published_at => @published_at
       })
       assert_not_equal non_matching, subject
-      non_matching = @event_class.new(@channel, @name, @params, {
+      non_matching = @event_class.new(@channel, @name, {
+        :params       => @params,
         :publisher    => @publisher,
         :published_at => Factory.time
       })
@@ -112,14 +119,11 @@ class Qs::Event
     end
 
     should "raise an error when given invalid attributes" do
-      assert_raises(Qs::BadEventError){ @event_class.new(nil, @name, @params) }
-      assert_raises(Qs::BadEventError) do
-        @event_class.new(@channel, nil, @params)
+      assert_raises(InvalidError){ @event_class.new(nil, @name) }
+      assert_raises(InvalidError){ @event_class.new(@channel, nil) }
+      assert_raises(InvalidError) do
+        @event_class.new(@channel, @name, :params => Factory.string)
       end
-      assert_raises(Qs::BadEventError) do
-        @event_class.new(@channel, @name, Factory.string)
-      end
-      assert_raises(Qs::BadEventError){ @event_class.new(@channel, @name, nil) }
     end
 
   end

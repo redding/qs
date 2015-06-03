@@ -71,12 +71,6 @@ module Qs::Client
       assert_equal call.job,    result
     end
 
-    should "default the job's params to an empty hash using `enqueue`" do
-      subject.enqueue(@queue, @job_name)
-      call = subject.enqueue_calls.last
-      assert_equal({}, call.job.params)
-    end
-
     should "enqueue a dispatch job and return its event using `publish`" do
       event_channel = Factory.string
       event_name    = Factory.string
@@ -94,15 +88,6 @@ module Qs::Client
       assert_equal dispatch_job.name,   call.job.name
       assert_equal dispatch_job.params, call.job.params
       assert_equal call.job.event,      result
-    end
-
-    should "default the dispatch job event params to an empty hash using `publish`" do
-      event_channel = Factory.string
-      event_name    = Factory.string
-      subject.publish(event_channel, event_name)
-
-      call = subject.enqueue_calls.last
-      assert_equal({}, call.job.params['event_params'])
     end
 
     should "enqueue a dispatch job with a custom publisher using `publish_as`" do

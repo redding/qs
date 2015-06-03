@@ -17,7 +17,7 @@ class Qs::Message
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @message = @message_class.new(@payload_type, @params)
+      @message = @message_class.new(@payload_type, :params => @params)
     end
     subject{ @message }
 

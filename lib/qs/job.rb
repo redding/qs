@@ -8,12 +8,13 @@ module Qs
 
     attr_reader :name, :created_at
 
-    def initialize(name, params, options = nil)
-      validate!(name, params)
+    def initialize(name, options = nil)
       options ||= {}
+      options[:params] ||= {}
+      validate!(name, options[:params])
       @name       = name
       @created_at = options[:created_at] || Time.now
-      super(PAYLOAD_TYPE, params)
+      super(PAYLOAD_TYPE, options)
     end
 
     def route_name
@@ -47,11 +48,11 @@ module Qs
       elsif !params.kind_of?(::Hash)
         "The job's params are not valid."
       end
-      raise(BadJobError, problem) if problem
+      raise(InvalidError, problem) if problem
     end
 
-  end
+    InvalidError = Class.new(ArgumentError)
 
-  BadJobError = Class.new(ArgumentError)
+  end
 
 end

@@ -4,9 +4,10 @@ module Qs
 
     attr_reader :payload_type, :params
 
-    def initialize(payload_type, params = nil)
+    def initialize(payload_type, options = nil)
+      options ||= {}
       @payload_type = payload_type.to_s
-      @params       = params || {}
+      @params       = options[:params] || {}
     end
 
     def route_id

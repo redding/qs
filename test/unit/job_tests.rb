@@ -32,7 +32,10 @@ class Qs::Job
       @current_time = Factory.time
       Assert.stub(Time, :now).with{ @current_time }
 
-      @job = @job_class.new(@name, @params, :created_at => @created_at)
+      @job = @job_class.new(@name, {
+        :params     => @params,
+        :created_at => @created_at
+      })
     end
     subject{ @job }
 
@@ -46,8 +49,9 @@ class Qs::Job
       assert_equal @created_at,   subject.created_at
     end
 
-    should "default its created at to the current time" do
-      job = @job_class.new(@name, @params)
+    should "default its params and created at to the current time" do
+      job = @job_class.new(@name)
+      assert_equal({}, job.params)
       assert_equal @current_time, job.created_at
     end
 
@@ -65,30 +69,32 @@ class Qs::Job
     end
 
     should "be comparable" do
-      matching = @job_class.new(@name, @params, {
+      matching = @job_class.new(@name, {
+        :params     => @params,
         :created_at => @created_at
       })
       assert_equal matching, subject
 
-      non_matching = @job_class.new(Factory.string, @params, {
+      non_matching = @job_class.new(Factory.string, {
+        :params     => @params,
         :created_at => @created_at
       })
       assert_not_equal non_matching, subject
-      other_params = { Factory.string => Factory.string }
-      non_matching = @job_class.new(@name, other_params, {
+      non_matching = @job_class.new(@name, {
+        :params     => { Factory.string => Factory.string },
         :created_at => @created_at
       })
       assert_not_equal non_matching, subject
-      non_matching = @job_class.new(@name, @params, {
+      non_matching = @job_class.new(@name, {
+        :params     => @params,
         :created_at => Factory.time
       })
       assert_not_equal non_matching, subject
     end
 
-    should "raise an error when given an invalid attributes" do
-      assert_raises(Qs::BadJobError){ @job_class.new(nil, @params) }
-      assert_raises(Qs::BadJobError){ @job_class.new(@name, nil) }
-      assert_raises(Qs::BadJobError){ @job_class.new(@name, Factory.string) }
+    should "raise an error when given invalid attributes" do
+      assert_raises(InvalidError){ @job_class.new(nil) }
+      assert_raises(InvalidError){ @job_class.new(@name, :params => Factory.string) }
     end
 
   end
