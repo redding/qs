@@ -1,6 +1,6 @@
 module Qs
 
-  class RedisItem
+  class QueueItem
 
     attr_reader :queue_redis_key, :encoded_payload
     attr_accessor :started, :finished

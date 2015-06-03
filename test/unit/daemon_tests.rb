@@ -6,7 +6,7 @@ require 'ns-options/assert_macros'
 require 'thread'
 require 'qs/client'
 require 'qs/queue'
-require 'qs/redis_item'
+require 'qs/queue_item'
 
 module Qs::Daemon
 
@@ -285,7 +285,7 @@ module Qs::Daemon
       assert_equal :block_dequeue, call.command
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
-      exp = Qs::RedisItem.new(@queue.redis_key, @encoded_payload)
+      exp = Qs::QueueItem.new(@queue.redis_key, @encoded_payload)
       assert_equal exp, @worker_pool_spy.work_items.first
     end
 
@@ -353,15 +353,15 @@ module Qs::Daemon
       @daemon = @daemon_class.new
       @thread = @daemon.start
 
-      @redis_item = Qs::RedisItem.new(Factory.string, Factory.string)
-      @worker_pool_spy.work_proc.call(@redis_item)
+      @queue_item = Qs::QueueItem.new(Factory.string, Factory.string)
+      @worker_pool_spy.work_proc.call(@queue_item)
     end
     subject{ @daemon }
 
     should "build and run a payload handler" do
       assert_not_nil @ph_spy
       assert_equal subject.daemon_data, @ph_spy.daemon_data
-      assert_equal @redis_item,         @ph_spy.redis_item
+      assert_equal @queue_item,         @ph_spy.queue_item
     end
 
   end
@@ -373,27 +373,27 @@ module Qs::Daemon
       @thread = @daemon.start
 
       @exception  = Factory.exception
-      @redis_item = Qs::RedisItem.new(Factory.string, Factory.string)
+      @queue_item = Qs::QueueItem.new(Factory.string, Factory.string)
       @callback   = @worker_pool_spy.on_worker_error_callbacks.first
     end
     subject{ @daemon }
 
-    should "requeue the redis item if it wasn't started" do
-      @redis_item.started = false
-      @callback.call('worker', @exception, @redis_item)
+    should "requeue the queue item if it wasn't started" do
+      @queue_item.started = false
+      @callback.call('worker', @exception, @queue_item)
       call = @client_spy.calls.detect{ |c| c.command == :prepend }
       assert_not_nil call
-      assert_equal @redis_item.queue_redis_key, call.args.first
-      assert_equal @redis_item.encoded_payload, call.args.last
+      assert_equal @queue_item.queue_redis_key, call.args.first
+      assert_equal @queue_item.encoded_payload, call.args.last
     end
 
-    should "not requeue the redis item if it was started" do
-      @redis_item.started = true
-      @callback.call('worker', @exception, @redis_item)
+    should "not requeue the queue item if it was started" do
+      @queue_item.started = true
+      @callback.call('worker', @exception, @queue_item)
       assert_nil @client_spy.calls.detect{ |c| c.command == :prepend }
     end
 
-    should "do nothing if not passed a redis item" do
+    should "do nothing if not passed a queue item" do
       assert_nothing_raised{ @callback.call(@exception, nil) }
     end
 
@@ -402,8 +402,8 @@ module Qs::Daemon
   class StopTests < StartTests
     desc "and then stopped"
     setup do
-      @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
-      @worker_pool_spy.add_work(@redis_item)
+      @queue_item = Qs::QueueItem.new(@queue.redis_key, Factory.string)
+      @worker_pool_spy.add_work(@queue_item)
 
       @daemon.stop true
     end
@@ -416,8 +416,8 @@ module Qs::Daemon
     should "requeue any work left on the pool" do
       call = @client_spy.calls.last
       assert_equal :prepend, call.command
-      assert_equal @redis_item.queue_redis_key, call.args.first
-      assert_equal @redis_item.encoded_payload, call.args.last
+      assert_equal @queue_item.queue_redis_key, call.args.first
+      assert_equal @queue_item.encoded_payload, call.args.last
     end
 
     should "stop the work loop thread" do
@@ -449,8 +449,8 @@ module Qs::Daemon
   class HaltTests < StartTests
     desc "and then halted"
     setup do
-      @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
-      @worker_pool_spy.add_work(@redis_item)
+      @queue_item = Qs::QueueItem.new(@queue.redis_key, Factory.string)
+      @worker_pool_spy.add_work(@queue_item)
 
       @daemon.halt true
     end
@@ -463,8 +463,8 @@ module Qs::Daemon
     should "requeue any work left on the pool" do
       call = @client_spy.calls.last
       assert_equal :prepend, call.command
-      assert_equal @redis_item.queue_redis_key, call.args.first
-      assert_equal @redis_item.encoded_payload, call.args.last
+      assert_equal @queue_item.queue_redis_key, call.args.first
+      assert_equal @queue_item.encoded_payload, call.args.last
     end
 
     should "stop the work loop thread" do
@@ -501,8 +501,8 @@ module Qs::Daemon
 
       # cause the daemon to loop, its sleeping on the original block_dequeue
       # call that happened before the stub
-      @redis_item = Qs::RedisItem.new(@queue.redis_key, Factory.string)
-      @client_spy.append(@redis_item.queue_redis_key, @redis_item.encoded_payload)
+      @queue_item = Qs::QueueItem.new(@queue.redis_key, Factory.string)
+      @client_spy.append(@queue_item.queue_redis_key, @queue_item.encoded_payload)
     end
 
     should "shutdown the worker pool" do
@@ -513,8 +513,8 @@ module Qs::Daemon
     should "requeue any work left on the pool" do
       call = @client_spy.calls.last
       assert_equal :prepend, call.command
-      assert_equal @redis_item.queue_redis_key, call.args.first
-      assert_equal @redis_item.encoded_payload, call.args.last
+      assert_equal @queue_item.queue_redis_key, call.args.first
+      assert_equal @queue_item.encoded_payload, call.args.last
     end
 
     should "stop the work loop thread" do
@@ -667,11 +667,11 @@ module Qs::Daemon
   TestHandler = Class.new
 
   class PayloadHandlerSpy
-    attr_reader :daemon_data, :redis_item, :run_called
+    attr_reader :daemon_data, :queue_item, :run_called
 
-    def initialize(daemon_data, redis_item)
+    def initialize(daemon_data, queue_item)
       @daemon_data = daemon_data
-      @redis_item  = redis_item
+      @queue_item  = queue_item
       @run_called  = false
     end
 
