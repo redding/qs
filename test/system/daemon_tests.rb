@@ -168,8 +168,8 @@ module Qs::Daemon
 
   end
 
-  class ShutdownWithUnprocessedRedisItemTests < SystemTests
-    desc "with a redis item that gets picked up but doesn't get processed"
+  class ShutdownWithUnprocessedQueueItemTests < SystemTests
+    desc "with a queue item that gets picked up but doesn't get processed"
     setup do
       Assert.stub(Qs::PayloadHandler, :new){ sleep 5 }
 
@@ -185,7 +185,7 @@ module Qs::Daemon
       @thread.join 1 # let the daemon have time to process jobs
     end
 
-    should "shutdown and requeue the redis item" do
+    should "shutdown and requeue the queue item" do
       @daemon.stop
       @thread.join 2 # give it time to shutdown, should be faster
       assert_false @thread.alive?
@@ -195,7 +195,7 @@ module Qs::Daemon
       assert_equal ['basic', 'slow', 'slow'], names
     end
 
-    should "shutdown and requeue the redis item" do
+    should "shutdown and requeue the queue item" do
       @daemon.halt
       @thread.join 2 # give it time to shutdown, should be faster
       assert_false @thread.alive?

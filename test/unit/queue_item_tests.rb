@@ -1,18 +1,18 @@
 require 'assert'
-require 'qs/redis_item'
+require 'qs/queue_item'
 
 require 'qs/queue'
 
-class Qs::RedisItem
+class Qs::QueueItem
 
   class UnitTests < Assert::Context
-    desc "Qs::RedisItem"
+    desc "Qs::QueueItem"
     setup do
       @queue_redis_key = Factory.string
       @encoded_payload = Factory.string
-      @redis_item = Qs::RedisItem.new(@queue_redis_key, @encoded_payload)
+      @queue_item = Qs::QueueItem.new(@queue_redis_key, @encoded_payload)
     end
-    subject{ @redis_item }
+    subject{ @queue_item }
 
     should have_readers :queue_redis_key, :encoded_payload
     should have_accessors :started, :finished
@@ -35,14 +35,14 @@ class Qs::RedisItem
     end
 
     should "know if it equals another item" do
-      exp = Qs::RedisItem.new(@queue_redis_key, @encoded_payload)
+      exp = Qs::QueueItem.new(@queue_redis_key, @encoded_payload)
       assert_equal exp, subject
 
       redis_key = Qs::Queue::RedisKey.new(Factory.string)
-      exp = Qs::RedisItem.new(redis_key, @encoded_payload)
+      exp = Qs::QueueItem.new(redis_key, @encoded_payload)
       assert_not_equal exp, subject
 
-      exp = Qs::RedisItem.new(@queue_redis_key, Factory.string)
+      exp = Qs::QueueItem.new(@queue_redis_key, Factory.string)
       assert_not_equal exp, subject
     end
 

@@ -2,7 +2,7 @@ require 'assert'
 require 'qs/payload_handler'
 
 require 'qs/daemon_data'
-require 'qs/redis_item'
+require 'qs/queue_item'
 
 class Qs::PayloadHandler
 
@@ -26,21 +26,21 @@ class Qs::PayloadHandler
         :routes => [@route_spy]
       })
       encoded_payload = Qs::Payload.serialize(@message)
-      @redis_item = Qs::RedisItem.new(Factory.string, encoded_payload)
+      @queue_item = Qs::QueueItem.new(Factory.string, encoded_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
 
-      @payload_handler = @handler_class.new(@daemon_data, @redis_item)
+      @payload_handler = @handler_class.new(@daemon_data, @queue_item)
     end
     subject{ @payload_handler }
 
-    should have_readers :daemon_data, :redis_item
+    should have_readers :daemon_data, :queue_item
     should have_readers :logger
     should have_imeths :run
 
-    should "know its daemon data, redis item and logger" do
+    should "know its daemon data, queue item and logger" do
       assert_equal @daemon_data, subject.daemon_data
-      assert_equal @redis_item,  subject.redis_item
+      assert_equal @queue_item,  subject.queue_item
       assert_equal @daemon_data.logger, subject.logger.passed_logger
       assert_equal @daemon_data.verbose_logging, subject.logger.verbose_logging
     end
@@ -53,38 +53,38 @@ class Qs::PayloadHandler
       @payload_handler.run
     end
 
-    should "run a route for the redis item" do
+    should "run a route for the queue item" do
       assert_true @route_spy.run_called
       assert_equal @message, @route_spy.message_passed_to_run
       assert_equal @daemon_data, @route_spy.daemon_data_passed_to_run
     end
 
-    should "build up its redis item as it processes it" do
-      assert_equal @message, @redis_item.message
-      assert_equal @route_spy.handler_class, @redis_item.handler_class
-      assert_nil @redis_item.exception
-      assert_instance_of Float, @redis_item.time_taken
+    should "build up its queue item as it processes it" do
+      assert_equal @message, @queue_item.message
+      assert_equal @route_spy.handler_class, @queue_item.handler_class
+      assert_nil @queue_item.exception
+      assert_instance_of Float, @queue_item.time_taken
     end
 
-    should "log its processing of the redis item" do
+    should "log its processing of the queue item" do
       logger_spy = subject.logger
       exp = "[Qs] ===== Received message ====="
       assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs]   Name:    #{@redis_item.message.route_id.inspect}"
+      exp = "[Qs]   Name:    #{@queue_item.message.route_id.inspect}"
       assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs]   Params:  #{@redis_item.message.params.inspect}"
+      exp = "[Qs]   Params:  #{@queue_item.message.params.inspect}"
       assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs]   Handler: #{@redis_item.handler_class}"
+      exp = "[Qs]   Handler: #{@queue_item.handler_class}"
       assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs] ===== Completed in #{@redis_item.time_taken}ms ====="
+      exp = "[Qs] ===== Completed in #{@queue_item.time_taken}ms ====="
       assert_includes exp, logger_spy.verbose.info_logged
       assert_empty logger_spy.verbose.error_logged
 
       exp = SummaryLine.new({
-        'time'    => @redis_item.time_taken,
-        'handler' => @redis_item.handler_class,
-        'name'    => @redis_item.message.route_id,
-        'params'  => @redis_item.message.params
+        'time'    => @queue_item.time_taken,
+        'handler' => @queue_item.handler_class,
+        'name'    => @queue_item.message.route_id,
+        'params'  => @queue_item.message.params
       })
       assert_equal 1, logger_spy.summary.info_logged.size
       assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
@@ -114,22 +114,22 @@ class Qs::PayloadHandler
       assert_equal @route_exception, @error_handler_spy.passed_exception
       exp = {
         :daemon_data     => @daemon_data,
-        :queue_redis_key => @redis_item.queue_redis_key,
-        :encoded_payload => @redis_item.encoded_payload,
-        :message         => @redis_item.message,
-        :handler_class   => @redis_item.handler_class
+        :queue_redis_key => @queue_item.queue_redis_key,
+        :encoded_payload => @queue_item.encoded_payload,
+        :message         => @queue_item.message,
+        :handler_class   => @queue_item.handler_class
       }
       assert_equal exp, @error_handler_spy.context_hash
       assert_true @error_handler_spy.run_called
     end
 
-    should "store the exception on the redis item" do
-      assert_equal @error_handler_spy.exception, @redis_item.exception
+    should "store the exception on the queue item" do
+      assert_equal @error_handler_spy.exception, @queue_item.exception
     end
 
-    should "log its processing of the redis item" do
+    should "log its processing of the queue item" do
       logger_spy = subject.logger
-      exception = @redis_item.exception
+      exception = @queue_item.exception
       backtrace = exception.backtrace.join("\n")
       exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
       assert_equal exp, logger_spy.verbose.error_logged.first
@@ -144,8 +144,8 @@ class Qs::PayloadHandler
       Assert.stub(@route_spy, :run){ raise @shutdown_error }
     end
 
-    should "run an error handler if the redis item was started" do
-      Assert.stub(@redis_item, :started){ true }
+    should "run an error handler if the queue item was started" do
+      Assert.stub(@queue_item, :started){ true }
       assert_raises{ @payload_handler.run }
 
       passed_exception = @error_handler_spy.passed_exception
@@ -155,8 +155,8 @@ class Qs::PayloadHandler
       assert_true @error_handler_spy.run_called
     end
 
-    should "not run an error handler if the redis item was started" do
-      Assert.stub(@redis_item, :started){ false }
+    should "not run an error handler if the queue item was started" do
+      Assert.stub(@queue_item, :started){ false }
       assert_raises{ @payload_handler.run }
 
       assert_nil @error_handler_spy

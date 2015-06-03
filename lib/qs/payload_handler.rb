@@ -8,11 +8,11 @@ module Qs
 
   class PayloadHandler
 
-    attr_reader :daemon_data, :redis_item, :logger
+    attr_reader :daemon_data, :queue_item, :logger
 
-    def initialize(daemon_data, redis_item)
+    def initialize(daemon_data, queue_item)
       @daemon_data = daemon_data
-      @redis_item  = redis_item
+      @queue_item  = queue_item
       @logger = Qs::Logger.new(
         @daemon_data.logger,
         @daemon_data.verbose_logging
@@ -21,48 +21,48 @@ module Qs
 
     def run
       log_received
-      benchmark = Benchmark.measure{ run!(@daemon_data, @redis_item) }
-      @redis_item.time_taken = RoundedTime.new(benchmark.real)
-      log_complete(@redis_item)
-      raise_if_debugging!(@redis_item.exception)
+      benchmark = Benchmark.measure{ run!(@daemon_data, @queue_item) }
+      @queue_item.time_taken = RoundedTime.new(benchmark.real)
+      log_complete(@queue_item)
+      raise_if_debugging!(@queue_item.exception)
     end
 
     private
 
-    def run!(daemon_data, redis_item)
-      redis_item.started = true
+    def run!(daemon_data, queue_item)
+      queue_item.started = true
 
-      message = Qs::Payload.deserialize(redis_item.encoded_payload)
+      message = Qs::Payload.deserialize(queue_item.encoded_payload)
       log_message(message)
-      redis_item.message = message
+      queue_item.message = message
 
       route = daemon_data.route_for(message.route_id)
       log_handler_class(route.handler_class)
-      redis_item.handler_class = route.handler_class
+      queue_item.handler_class = route.handler_class
 
       route.run(message, daemon_data)
-      redis_item.finished = true
+      queue_item.finished = true
     rescue DatWorkerPool::ShutdownError => exception
-      if redis_item.started
+      if queue_item.started
         error = ShutdownError.new(exception.message)
         error.set_backtrace(exception.backtrace)
-        handle_exception(error, daemon_data, redis_item)
+        handle_exception(error, daemon_data, queue_item)
       end
       raise exception
     rescue StandardError => exception
-      handle_exception(exception, daemon_data, redis_item)
+      handle_exception(exception, daemon_data, queue_item)
     end
 
-    def handle_exception(exception, daemon_data, redis_item)
+    def handle_exception(exception, daemon_data, queue_item)
       error_handler = Qs::ErrorHandler.new(exception, {
         :daemon_data     => daemon_data,
-        :queue_redis_key => redis_item.queue_redis_key,
-        :encoded_payload => redis_item.encoded_payload,
-        :message         => redis_item.message,
-        :handler_class   => redis_item.handler_class
+        :queue_redis_key => queue_item.queue_redis_key,
+        :encoded_payload => queue_item.encoded_payload,
+        :message         => queue_item.message,
+        :handler_class   => queue_item.handler_class
       }).tap(&:run)
-      redis_item.exception = error_handler.exception
-      log_exception(redis_item.exception)
+      queue_item.exception = error_handler.exception
+      log_exception(queue_item.exception)
     end
 
     def raise_if_debugging!(exception)
@@ -82,17 +82,17 @@ module Qs
       log_verbose "  Handler: #{handler_class}"
     end
 
-    def log_complete(redis_item)
-      log_verbose "===== Completed in #{redis_item.time_taken}ms ====="
+    def log_complete(queue_item)
+      log_verbose "===== Completed in #{queue_item.time_taken}ms ====="
       summary_line_args = {
-        'time'    => redis_item.time_taken,
-        'handler' => redis_item.handler_class
+        'time'    => queue_item.time_taken,
+        'handler' => queue_item.handler_class
       }
-      if (message = redis_item.message)
+      if (message = queue_item.message)
         summary_line_args['name']   = message.route_id
         summary_line_args['params'] = message.params
       end
-      if (exception = redis_item.exception)
+      if (exception = queue_item.exception)
         summary_line_args['error'] = "#{exception.inspect}"
       end
       log_summary SummaryLine.new(summary_line_args)

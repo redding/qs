@@ -9,7 +9,7 @@ require 'qs/daemon_data'
 require 'qs/io_pipe'
 require 'qs/logger'
 require 'qs/payload_handler'
-require 'qs/redis_item'
+require 'qs/queue_item'
 
 module Qs
 
@@ -96,8 +96,8 @@ module Qs
 
       private
 
-      def process(redis_item)
-        Qs::PayloadHandler.new(self.daemon_data, redis_item).run
+      def process(queue_item)
+        Qs::PayloadHandler.new(self.daemon_data, queue_item).run
       end
 
       def work_loop
@@ -128,9 +128,9 @@ module Qs
         wp = DatWorkerPool.new(
           self.daemon_data.min_workers,
           self.daemon_data.max_workers
-        ){ |redis_item| process(redis_item) }
-        wp.on_worker_error do |worker, exception, redis_item|
-          handle_worker_exception(exception, redis_item)
+        ){ |queue_item| process(queue_item) }
+        wp.on_worker_error do |worker, exception, queue_item|
+          handle_worker_exception(exception, queue_item)
         end
         wp.on_worker_sleep{ @worker_available_io.write(SIGNAL) }
         wp.start
@@ -153,7 +153,7 @@ module Qs
           args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
           redis_key, encoded_payload = @client.block_dequeue(*args)
           if redis_key != @signals_redis_key
-            @worker_pool.add_work(RedisItem.new(redis_key, encoded_payload))
+            @worker_pool.add_work(QueueItem.new(redis_key, encoded_payload))
           end
         rescue RuntimeError => exception
           log "Error dequeueing #{exception.message.inspect}", :error
@@ -196,16 +196,16 @@ module Qs
       # * This only catches errors that happen outside of running the payload
       #   handler. The only known use-case for this is dat worker pools
       #   hard-shutdown errors.
-      # * If there isn't a redis item (this can happen when an idle worker is
+      # * If there isn't a queue item (this can happen when an idle worker is
       #   being forced to exit) then we don't need to do anything.
-      # * If we never started processing the redis item, its safe to requeue it.
+      # * If we never started processing the queue item, its safe to requeue it.
       #   Otherwise it happened while processing so the payload handler caught
       #   it or it happened after the payload handler which we don't care about.
-      def handle_worker_exception(exception, redis_item)
-        return if redis_item.nil?
-        if !redis_item.started
+      def handle_worker_exception(exception, queue_item)
+        return if queue_item.nil?
+        if !queue_item.started
           log "Worker error, requeueing message because it hasn't started", :error
-          @client.prepend(redis_item.queue_redis_key, redis_item.encoded_payload)
+          @client.prepend(queue_item.queue_redis_key, queue_item.encoded_payload)
         else
           log "Worker error after message was processed, ignoring", :error
         end
