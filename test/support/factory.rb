@@ -18,45 +18,31 @@ module Factory
     self.send([:job, :event].choice, params)
   end
 
-  def self.job(params = nil)
-    params ||= {}
-    params[:name]       ||= Factory.string
-    params[:params]     ||= { Factory.string => Factory.string }
-    params[:created_at] ||= Factory.time
-    Qs::Job.new(
-      params.delete(:name),
-      params.delete(:params),
-      params
-    )
+  def self.job(args = nil)
+    args ||= {}
+    name = args.delete(:name) || Factory.string
+    args[:params]     ||= { Factory.string => Factory.string }
+    args[:created_at] ||= Factory.time
+    Qs::Job.new(name, args)
   end
 
-  def self.dispatch_job(params = nil)
-    params ||= {}
-    params[:event_channel] ||= Factory.string
-    params[:event_name]    ||= Factory.string
-    params[:event_params]  ||= { Factory.string => Factory.string }
-    params[:created_at]    ||= Factory.time
-    Qs::DispatchJob.new(
-      params.delete(:event_channel),
-      params.delete(:event_name),
-      params.delete(:event_params),
-      params
-    )
+  def self.dispatch_job(args = nil)
+    args ||= {}
+    event_channel = args.delete(:event_channel) || Factory.string
+    event_name    = args.delete(:event_name)    || Factory.string
+    args[:event_params] ||= { Factory.string => Factory.string }
+    args[:created_at]   ||= Factory.time
+    Qs::DispatchJob.new(event_channel, event_name, args)
   end
 
-  def self.event(params = nil)
-    params ||= {}
-    params[:channel]      ||= Factory.string
-    params[:name]         ||= Factory.string
-    params[:params]       ||= { Factory.string => Factory.string }
-    params[:publisher]    ||= Factory.string
-    params[:published_at] ||= Factory.time
-    Qs::Event.new(
-      params.delete(:channel),
-      params.delete(:name),
-      params.delete(:params),
-      params
-    )
+  def self.event(args = nil)
+    args ||= {}
+    channel = args.delete(:channel) || Factory.string
+    name    = args.delete(:name)    || Factory.string
+    args[:params]       ||= { Factory.string => Factory.string }
+    args[:publisher]    ||= Factory.string
+    args[:published_at] ||= Factory.time
+    Qs::Event.new(channel, name, args)
   end
 
 end

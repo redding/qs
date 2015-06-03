@@ -6,27 +6,25 @@ module Qs
 
   class DispatchJob < Qs::Job
 
-    def initialize(event_channel, event_name, event_params, options = nil)
+    def initialize(event_channel, event_name, options = nil)
       options ||= {}
+      event_params    = options.delete(:event_params)    || {}
       event_publisher = options.delete(:event_publisher) || Qs.event_publisher
-      params = {
+      options[:params] = {
         'event_channel'   => event_channel,
         'event_name'      => event_name,
         'event_params'    => event_params,
         'event_publisher' => event_publisher
       }
-      super(Qs.dispatcher_job_name, params, options)
+      super(Qs.dispatcher_job_name, options)
     end
 
     def event
-      @event ||= Qs::Event.new(
-        params['event_channel'],
-        params['event_name'],
-        params['event_params'],
-        { :publisher    => params['event_publisher'],
-          :published_at => self.created_at
-        }
-      )
+      @event ||= Qs::Event.new(params['event_channel'], params['event_name'], {
+        :params       => params['event_params'],
+        :publisher    => params['event_publisher'],
+        :published_at => self.created_at
+      })
     end
 
   end

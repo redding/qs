@@ -31,21 +31,24 @@ module Qs
         @redis_config = redis_config
       end
 
-      def enqueue(queue, job_name, params = nil)
-        job = Qs::Job.new(job_name, params || {})
+      def enqueue(queue, job_name, job_params = nil)
+        job = Qs::Job.new(job_name, :params => job_params)
         enqueue!(queue, job)
         job
       end
 
       def publish(channel, name, params = nil)
-        publish!(channel, name, params)
+        publish!(channel, name, :event_params => params)
       end
 
       def publish_as(publisher, channel, name, params = nil)
-        publish!(channel, name, params, :event_publisher => publisher)
+        publish!(channel, name, {
+          :event_params    => params,
+          :event_publisher => publisher,
+        })
       end
 
-      def push(queue_name, payload)
+      def push(queue_name, payload_hash)
         raise NotImplementedError
       end
 
@@ -89,8 +92,8 @@ module Qs
 
       private
 
-      def publish!(channel, name, params = nil, options = nil)
-        dispatch_job = DispatchJob.new(channel, name, params || {}, options)
+      def publish!(channel, name, options = nil)
+        dispatch_job = DispatchJob.new(channel, name, options)
         enqueue!(Qs.dispatcher_queue, dispatch_job)
         dispatch_job.event
       end

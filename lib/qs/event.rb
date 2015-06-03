@@ -8,14 +8,15 @@ module Qs
 
     attr_reader :channel, :name, :publisher, :published_at
 
-    def initialize(channel, name, params, options = nil)
-      validate!(channel, name, params)
+    def initialize(channel, name, options = nil)
       options ||= {}
+      options[:params] ||= {}
+      validate!(channel, name, options[:params])
       @channel      = channel
       @name         = name
       @publisher    = options[:publisher]
       @published_at = options[:published_at] || Time.now
-      super(PAYLOAD_TYPE, params)
+      super(PAYLOAD_TYPE, options)
     end
 
     def route_name
@@ -55,7 +56,7 @@ module Qs
       elsif !params.kind_of?(::Hash)
         "The event's params are not valid."
       end
-      raise(BadEventError, problem) if problem
+      raise(InvalidError, problem) if problem
     end
 
     module RouteName
@@ -70,8 +71,8 @@ module Qs
       end
     end
 
-  end
+    InvalidError = Class.new(ArgumentError)
 
-  BadEventError = Class.new(ArgumentError)
+  end
 
 end

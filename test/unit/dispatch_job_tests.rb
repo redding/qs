@@ -27,7 +27,8 @@ class Qs::DispatchJob
       @event_params    = { Factory.string => Factory.string }
       @event_publisher = Factory.string
       @created_at      = Factory.time
-      @job = @job_class.new(@event_channel, @event_name, @event_params, {
+      @job = @job_class.new(@event_channel, @event_name, {
+        :event_params    => @event_params,
         :event_publisher => @event_publisher,
         :created_at      => @created_at
       })
@@ -51,22 +52,20 @@ class Qs::DispatchJob
       assert_equal @created_at, subject.created_at
     end
 
-    should "default its event publisher" do
+    should "default its event params and event publisher" do
       Qs.config.event_publisher = Factory.string
-      job = @job_class.new(@event_channel, @event_name, @event_params)
+      job = @job_class.new(@event_channel, @event_name)
+      assert_equal({}, job.params['event_params'])
       assert_equal Qs.event_publisher, job.params['event_publisher']
     end
 
     should "know how to build an event from its params" do
       event = subject.event
-      exp = Qs::Event.new(
-        @event_channel,
-        @event_name,
-        @event_params,
-        { :publisher    => @event_publisher,
-          :published_at => @created_at
-        }
-      )
+      exp = Qs::Event.new(@event_channel, @event_name, {
+        :params       => @event_params,
+        :publisher    => @event_publisher,
+        :published_at => @created_at
+      })
       assert_equal exp, event
       assert_same event, subject.event
     end
