@@ -6,18 +6,22 @@ module Qs
 
   module Payload
 
-    PAYLOAD_TYPES = Hash.new{ |h, t| raise(InvalidError.new(t)) }.tap do |h|
+    METHOD_NAMES = Hash.new{ |h, t| raise(InvalidError.new(t)) }.tap do |h|
       h[Job::PAYLOAD_TYPE]   = 'job'
       h[Event::PAYLOAD_TYPE] = 'event'
     end.freeze
 
+    def self.type_method_name(payload_type)
+      METHOD_NAMES[payload_type]
+    end
+
     def self.deserialize(encoded_payload)
       payload_hash = Qs.decode(encoded_payload)
-      self.send(PAYLOAD_TYPES[payload_hash['type']], payload_hash)
+      self.send(self.type_method_name(payload_hash['type']), payload_hash)
     end
 
     def self.serialize(message)
-      Qs.encode(self.send("#{PAYLOAD_TYPES[message.payload_type]}_hash", message))
+      Qs.encode(self.send("#{self.type_method_name(message.payload_type)}_hash", message))
     end
 
     def self.job(payload_hash)

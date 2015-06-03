@@ -16,23 +16,30 @@ class Qs::PayloadHandler
 
   end
 
-  class InitTests < UnitTests
+  class InitSetupTests < UnitTests
     desc "when init"
-    setup do
-      @message     = Factory.message
-      @route_spy   = RouteSpy.new(@message.route_id)
+    subject{ @payload_handler }
+
+    def setup_for_message(message)
+      @route_spy   = RouteSpy.new(message.route_id)
       @daemon_data = Qs::DaemonData.new({
         :logger => Qs::NullLogger.new,
         :routes => [@route_spy]
       })
-      encoded_payload = Qs::Payload.serialize(@message)
+      encoded_payload = Qs::Payload.serialize(message)
       @queue_item = Qs::QueueItem.new(Factory.string, encoded_payload)
 
       Assert.stub(Qs::Logger, :new){ |*args| QsLoggerSpy.new(*args) }
+    end
 
+  end
+
+  class InitTests < InitSetupTests
+    setup do
+      @message = Factory.message
+      setup_for_message(@message)
       @payload_handler = @handler_class.new(@daemon_data, @queue_item)
     end
-    subject{ @payload_handler }
 
     should have_readers :daemon_data, :queue_item
     should have_readers :logger
@@ -64,31 +71,6 @@ class Qs::PayloadHandler
       assert_equal @route_spy.handler_class, @queue_item.handler_class
       assert_nil @queue_item.exception
       assert_instance_of Float, @queue_item.time_taken
-    end
-
-    should "log its processing of the queue item" do
-      logger_spy = subject.logger
-      exp = "[Qs] ===== Received message ====="
-      assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs]   Name:    #{@queue_item.message.route_id.inspect}"
-      assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs]   Params:  #{@queue_item.message.params.inspect}"
-      assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs]   Handler: #{@queue_item.handler_class}"
-      assert_includes exp, logger_spy.verbose.info_logged
-      exp = "[Qs] ===== Completed in #{@queue_item.time_taken}ms ====="
-      assert_includes exp, logger_spy.verbose.info_logged
-      assert_empty logger_spy.verbose.error_logged
-
-      exp = SummaryLine.new({
-        'time'    => @queue_item.time_taken,
-        'handler' => @queue_item.handler_class,
-        'name'    => @queue_item.message.route_id,
-        'params'  => @queue_item.message.params
-      })
-      assert_equal 1, logger_spy.summary.info_logged.size
-      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
-      assert_empty logger_spy.summary.error_logged
     end
 
   end
@@ -125,14 +107,6 @@ class Qs::PayloadHandler
 
     should "store the exception on the queue item" do
       assert_equal @error_handler_spy.exception, @queue_item.exception
-    end
-
-    should "log its processing of the queue item" do
-      logger_spy = subject.logger
-      exception = @queue_item.exception
-      backtrace = exception.backtrace.join("\n")
-      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
-      assert_equal exp, logger_spy.verbose.error_logged.first
     end
 
   end
@@ -183,27 +157,253 @@ class Qs::PayloadHandler
 
   end
 
-  class SummaryLineTests < UnitTests
-    desc "SummaryLine"
+  class LoggingJobSetupTests < InitSetupTests
+    desc "and run with a job queue item"
+    setup do
+      @job = Factory.job
+      setup_for_message(@job)
+      @payload_handler = @handler_class.new(@daemon_data, @queue_item)
+    end
+
+  end
+
+  class LoggingJobTests < LoggingJobSetupTests
+    setup do
+      @payload_handler.run
+    end
+
+    should "log its processing of the job queue item" do
+      logger_spy = subject.logger
+      exp = "[Qs] ===== Received message ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Job:       #{@job.route_name.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Params:    #{@job.params.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Handler:   #{@queue_item.handler_class}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs] ===== Completed in #{@queue_item.time_taken}ms ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+      assert_empty logger_spy.verbose.error_logged
+
+      exp = JobSummaryLine.new(@job, {
+        'time'    => @queue_item.time_taken,
+        'handler' => @queue_item.handler_class,
+        'params'  => @queue_item.message.params
+      })
+      assert_equal 1, logger_spy.summary.info_logged.size
+      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
+      assert_empty logger_spy.summary.error_logged
+    end
+
+  end
+
+  class LoggingJobErrorTests < LoggingJobSetupTests
+    desc "that errors while being processed"
+    setup do
+      @route_exception = Factory.exception
+      Assert.stub(@route_spy, :run){ raise @route_exception }
+
+      @payload_handler.run
+    end
+
+    should "log the error" do
+      logger_spy = subject.logger
+      exception = @queue_item.exception
+      backtrace = exception.backtrace.join("\n")
+      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      assert_equal exp, logger_spy.verbose.error_logged.first
+
+      exp = JobSummaryLine.new(@job, {
+        'time'    => @queue_item.time_taken,
+        'handler' => @queue_item.handler_class,
+        'params'  => @queue_item.message.params,
+        'error'   => "#{exception.class}: #{exception.message}"
+      })
+      assert_equal 1, logger_spy.summary.info_logged.size
+      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
+      assert_empty logger_spy.summary.error_logged
+    end
+
+  end
+
+  class LoggingEventSetupTests < InitSetupTests
+    desc "and run with a event queue item"
+    setup do
+      @event = Factory.event
+      setup_for_message(@event)
+      @payload_handler = @handler_class.new(@daemon_data, @queue_item)
+    end
+
+  end
+
+  class LoggingEventTests < LoggingEventSetupTests
+    setup do
+      @payload_handler.run
+    end
+
+    should "log its processing of the event queue item" do
+      logger_spy = subject.logger
+      exp = "[Qs] ===== Received message ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Event:     #{@event.route_name.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Publisher: #{@event.publisher.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Params:    #{@event.params.inspect}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs]   Handler:   #{@queue_item.handler_class}"
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs] ===== Completed in #{@queue_item.time_taken}ms ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+      assert_empty logger_spy.verbose.error_logged
+
+      exp = EventSummaryLine.new(@event, {
+        'time'    => @queue_item.time_taken,
+        'handler' => @queue_item.handler_class,
+        'params'  => @queue_item.message.params
+      })
+      assert_equal 1, logger_spy.summary.info_logged.size
+      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
+      assert_empty logger_spy.summary.error_logged
+    end
+
+  end
+
+  class LoggingEventErrorTests < LoggingEventSetupTests
+    desc "that errors while being processed"
+    setup do
+      @route_exception = Factory.exception
+      Assert.stub(@route_spy, :run){ raise @route_exception }
+
+      @payload_handler.run
+    end
+
+    should "log the error" do
+      logger_spy = subject.logger
+      exception = @queue_item.exception
+      backtrace = exception.backtrace.join("\n")
+      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      assert_equal exp, logger_spy.verbose.error_logged.first
+
+      exp = EventSummaryLine.new(@event, {
+        'time'    => @queue_item.time_taken,
+        'handler' => @queue_item.handler_class,
+        'params'  => @queue_item.message.params,
+        'error'   => "#{exception.class}: #{exception.message}"
+      })
+      assert_equal 1, logger_spy.summary.info_logged.size
+      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
+      assert_empty logger_spy.summary.error_logged
+    end
+
+  end
+
+  class LoggingUnknownTests < InitSetupTests
+    desc "and run with an unknown type of queue item"
+    setup do
+      @message = Factory.message
+      setup_for_message(@message)
+
+      Assert.stub(Qs::Payload, :deserialize){ raise Factory.exception }
+
+      @payload_handler = @handler_class.new(@daemon_data, @queue_item)
+      @payload_handler.run
+    end
+
+    should "log its processing of the job queue item" do
+      logger_spy = subject.logger
+      exp = "[Qs] ===== Received message ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+      exp = "[Qs] ===== Completed in #{@queue_item.time_taken}ms ====="
+      assert_includes exp, logger_spy.verbose.info_logged
+
+      logger_spy = subject.logger
+      exception = @queue_item.exception
+      backtrace = exception.backtrace.join("\n")
+      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      assert_equal exp, logger_spy.verbose.error_logged.first
+
+      exp = UnknownSummaryLine.new({
+        'time'    => @queue_item.time_taken,
+        'handler' => @queue_item.handler_class,
+        'error'   => "#{exception.class}: #{exception.message}"
+      })
+      assert_equal 1, logger_spy.summary.info_logged.size
+      assert_equal "[Qs] #{exp}", logger_spy.summary.info_logged.first
+      assert_empty logger_spy.summary.error_logged
+    end
+
+  end
+
+  class UnknownSummaryLineTests < UnitTests
+    desc "UnknownSummaryLine"
     setup do
       @attrs = {
-        'time'    => Factory.string,
-        'handler' => Factory.string,
-        'name'    => Factory.string,
-        'params'  => Factory.string,
-        'error'   => Factory.string
+       'time'    => Factory.integer,
+       'handler' => Factory.string,
+       'error'   => Factory.string
       }
-      @summary_line = SummaryLine.new(@attrs)
+      @summary_line = UnknownSummaryLine.new(@attrs)
     end
     subject{ @summary_line }
 
-    should "build a string of all the attributes ordered with their values" do
-      expected = "time=#{@attrs['time'].inspect} " \
-                 "handler=#{@attrs['handler'].inspect} " \
-                 "name=#{@attrs['name'].inspect} " \
-                 "params=#{@attrs['params'].inspect} " \
-                 "error=#{@attrs['error'].inspect}"
-      assert_equal expected, subject
+    should "build an ordered string of the attributes with their values" do
+      exp = "time=#{@attrs['time'].inspect} " \
+            "handler=#{@attrs['handler'].inspect} " \
+            "error=#{@attrs['error'].inspect}"
+      assert_equal exp, subject
+    end
+
+  end
+
+  class JobSummaryLineTests < UnitTests
+    desc "JobSummaryLine"
+    setup do
+      @job = Factory.job
+      @attrs = {
+       'time'    => Factory.integer,
+       'handler' => Factory.string,
+       'params'  => { Factory.string => Factory.string },
+       'error'   => Factory.string
+      }
+      @summary_line = JobSummaryLine.new(@job, @attrs)
+    end
+    subject{ @summary_line }
+
+    should "build an ordered string of the attributes with their values" do
+      exp = "time=#{@attrs['time'].inspect} " \
+            "handler=#{@attrs['handler'].inspect} " \
+            "job=#{@job.route_name.inspect} " \
+            "params=#{@attrs['params'].inspect} " \
+            "error=#{@attrs['error'].inspect}"
+      assert_equal exp, subject
+    end
+
+  end
+
+  class EventSummaryLineTests < UnitTests
+    desc "EventSummaryLine"
+    setup do
+      @event = Factory.event(:publisher => Factory.string)
+      @attrs = {
+       'time'    => Factory.integer,
+       'handler' => Factory.string,
+       'params'  => { Factory.string => Factory.string },
+       'error'   => Factory.string
+      }
+      @summary_line = EventSummaryLine.new(@event, @attrs)
+    end
+    subject{ @summary_line }
+
+    should "build an ordered string of the attributes with their values" do
+      exp = "time=#{@attrs['time'].inspect} " \
+            "handler=#{@attrs['handler'].inspect} " \
+            "event=#{@event.route_name.inspect} " \
+            "publisher=#{@event.publisher.inspect} " \
+            "params=#{@attrs['params'].inspect} " \
+            "error=#{@attrs['error'].inspect}"
+      assert_equal exp, subject
     end
 
   end
