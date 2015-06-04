@@ -2,6 +2,7 @@ require 'ns-options'
 require 'qs/version'
 require 'qs/client'
 require 'qs/daemon'
+require 'qs/dispatcher_queue'
 require 'qs/job_handler'
 require 'qs/queue'
 
@@ -19,10 +20,12 @@ module Qs
       self.config.redis.db
     )
 
-    @dispatcher_queue ||= begin
-      dispatcher_name = self.config.dispatcher_name
-      Queue.new{ name(dispatcher_name) }
-    end
+    @dispatcher_queue ||= DispatcherQueue.new({
+      :queue_class            => self.config.dispatcher_queue_class,
+      :queue_name             => self.config.dispatcher.queue_name,
+      :job_name               => self.config.dispatcher.job_name,
+      :job_handler_class_name => self.config.dispatcher.job_handler_class_name
+    })
 
     @encoder ||= self.config.encoder
     @decoder ||= self.config.decoder
@@ -94,7 +97,7 @@ module Qs
   end
 
   def self.dispatcher_job_name
-    self.config.dispatcher_job_name
+    self.config.dispatcher.job_name
   end
 
   def self.event_publisher
@@ -108,14 +111,18 @@ module Qs
   class Config
     include NsOptions::Proxy
 
-    option :dispatcher_name,     String, :default => 'dispatcher'
-    option :dispatcher_job_name, String, :default => 'dispatch_event'
-    option :event_publisher,     String
-
     option :encoder, Proc, :default => proc{ |p| ::JSON.dump(p) }
     option :decoder, Proc, :default => proc{ |p| ::JSON.load(p) }
 
     option :timeout, Float
+
+    option :event_publisher, String
+
+    namespace :dispatcher do
+      option :queue_name,             String, :default => 'dispatcher'
+      option :job_name,               String, :default => 'run_dispatch_job'
+      option :job_handler_class_name, String, :default => DispatcherQueue::RunDispatchJob.to_s
+    end
 
     namespace :redis do
       option :ip,   :default => 'localhost'
@@ -128,6 +135,12 @@ module Qs
       option :driver,   String,  :default => 'ruby'
       option :timeout,  Integer, :default => 1
       option :size,     Integer, :default => 4
+    end
+
+    attr_accessor :dispatcher_queue_class
+
+    def initialize
+      self.dispatcher_queue_class = Queue
     end
   end
 
