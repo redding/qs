@@ -53,6 +53,7 @@ module Qs::Client
     should have_imeths :append, :prepend
     should have_imeths :clear
     should have_imeths :sync_subscriptions, :clear_subscriptions
+    should have_imeths :event_subscribers
 
     should "know its redis config" do
       assert_equal @redis_config, subject.redis_config
@@ -168,6 +169,21 @@ module Qs::Client
 
       call = @connection_spy.redis_calls.last
       assert_equal :ping, call.command
+    end
+
+    should "return the events subscriber set using `event_subscribers`" do
+      smembers_key = nil
+      smembers = Factory.integer(3).times.map{ Factory.string }
+      Assert.stub(@connection_spy.redis_spy, :smembers) do |key|
+        smembers_key = key
+        smembers
+      end
+
+      event = Factory.event
+      result = subject.event_subscribers(event)
+
+      assert_equal event.subscribers_redis_key, smembers_key
+      assert_equal smembers, result
     end
 
   end

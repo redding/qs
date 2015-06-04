@@ -23,6 +23,10 @@ module Qs
       @route_name ||= Event::RouteName.new(self.channel, self.name)
     end
 
+    def subscribers_redis_key
+      @subscribers_redis_key ||= SubscribersRedisKey.new(self.route_name)
+    end
+
     def inspect
       reference = '0x0%x' % (self.object_id << 1)
       "#<#{self.class}:#{reference} " \

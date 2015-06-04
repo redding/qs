@@ -73,6 +73,10 @@ module Qs
     self.client.clear_subscriptions(queue)
   end
 
+  def self.event_subscribers(event)
+    self.client.event_subscribers(event)
+  end
+
   def self.client
     @client
   end

@@ -6,6 +6,14 @@ module Qs
 
   class DispatchJob < Qs::Job
 
+    def self.event(job)
+      Qs::Event.new(job.params['event_channel'], job.params['event_name'], {
+        :params       => job.params['event_params'],
+        :publisher    => job.params['event_publisher'],
+        :published_at => job.created_at
+      })
+    end
+
     def initialize(event_channel, event_name, options = nil)
       options ||= {}
       event_params    = options.delete(:event_params)    || {}
@@ -20,11 +28,7 @@ module Qs
     end
 
     def event
-      @event ||= Qs::Event.new(params['event_channel'], params['event_name'], {
-        :params       => params['event_params'],
-        :publisher    => params['event_publisher'],
-        :published_at => self.created_at
-      })
+      @event ||= self.class.event(self)
     end
 
   end

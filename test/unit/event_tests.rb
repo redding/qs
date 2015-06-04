@@ -43,7 +43,7 @@ class Qs::Event
     subject{ @event }
 
     should have_readers :channel, :name, :publisher, :published_at
-    should have_imeths :route_name
+    should have_imeths :route_name, :subscribers_redis_key
 
     should "know its attributes" do
       assert_equal PAYLOAD_TYPE,  subject.payload_type
@@ -65,6 +65,11 @@ class Qs::Event
       result = subject.route_name
       assert_equal exp, result
       assert_same result, subject.route_name
+    end
+
+    should "know its subscribers redis key" do
+      exp = SubscribersRedisKey.new(subject.route_name)
+      assert_equal exp, subject.subscribers_redis_key
     end
 
     should "have a custom inspect" do
