@@ -1,6 +1,8 @@
 require 'benchmark'
 require 'dat-worker-pool'
 require 'qs/error_handler'
+require 'qs/event'
+require 'qs/job'
 require 'qs/logger'
 require 'qs/payload'
 
@@ -74,28 +76,26 @@ module Qs
     end
 
     def log_message(message)
-      log_verbose "  Name:    #{message.route_id.inspect}"
-      log_verbose "  Params:  #{message.params.inspect}"
+      self.send("log_#{Qs::Payload.type_method_name(message.payload_type)}", message)
+      log_verbose "  Params:    #{message.params.inspect}"
+    end
+
+    def log_job(job)
+      log_verbose "  Job:       #{job.route_name.inspect}"
+    end
+
+    def log_event(event)
+      log_verbose "  Event:     #{event.route_name.inspect}"
+      log_verbose "  Publisher: #{event.publisher.inspect}"
     end
 
     def log_handler_class(handler_class)
-      log_verbose "  Handler: #{handler_class}"
+      log_verbose "  Handler:   #{handler_class}"
     end
 
     def log_complete(queue_item)
       log_verbose "===== Completed in #{queue_item.time_taken}ms ====="
-      summary_line_args = {
-        'time'    => queue_item.time_taken,
-        'handler' => queue_item.handler_class
-      }
-      if (message = queue_item.message)
-        summary_line_args['name']   = message.route_id
-        summary_line_args['params'] = message.params
-      end
-      if (exception = queue_item.exception)
-        summary_line_args['error'] = "#{exception.inspect}"
-      end
-      log_summary SummaryLine.new(summary_line_args)
+      log_summary build_summary_line(queue_item)
     end
 
     def log_exception(exception)
@@ -112,18 +112,72 @@ module Qs
       self.logger.summary.send(level, "[Qs] #{message}")
     end
 
+    def build_summary_line(queue_item)
+      summary_line_args = {
+        'time'    => queue_item.time_taken,
+        'handler' => queue_item.handler_class
+      }
+      if (exception = queue_item.exception)
+        summary_line_args['error'] = "#{exception.class}: #{exception.message}"
+      end
+      if (message = queue_item.message)
+        summary_line_args['params'] = message.params
+        self.send(
+          "#{Qs::Payload.type_method_name(message.payload_type)}_summary_line",
+          message,
+          summary_line_args
+        )
+      else
+        UnknownSummaryLine.new(summary_line_args)
+      end
+    end
+
+    def job_summary_line(job, summary_line_args)
+      JobSummaryLine.new(job, summary_line_args)
+    end
+
+    def event_summary_line(event, summary_line_args)
+      EventSummaryLine.new(event, summary_line_args)
+    end
+
+    module SummaryLine
+      def self.new(keys, line_attrs)
+        keys.map{ |k| "#{k}=#{line_attrs[k].inspect}" }.join(' ')
+      end
+    end
+
+    module UnknownSummaryLine
+      ORDERED_KEYS = %w(time handler error).freeze
+
+      def self.new(line_attrs)
+        SummaryLine.new(ORDERED_KEYS, line_attrs)
+      end
+    end
+
+    module JobSummaryLine
+      ORDERED_KEYS = %w(time handler job params error).freeze
+
+      def self.new(job, line_attrs)
+        SummaryLine.new(ORDERED_KEYS, line_attrs.merge('job' => job.route_name))
+      end
+    end
+
+    module EventSummaryLine
+      ORDERED_KEYS = %w(time handler event publisher params error).freeze
+
+      def self.new(event, line_attrs)
+        SummaryLine.new(ORDERED_KEYS, line_attrs.merge({
+          'event'     => event.route_name,
+          'publisher' => event.publisher
+        }))
+      end
+    end
+
     module RoundedTime
       ROUND_PRECISION = 2
       ROUND_MODIFIER = 10 ** ROUND_PRECISION
       def self.new(time_in_seconds)
         (time_in_seconds * 1000 * ROUND_MODIFIER).to_i / ROUND_MODIFIER.to_f
-      end
-    end
-
-    module SummaryLine
-      def self.new(line_attrs)
-        attr_keys = %w{time handler name params error}
-        attr_keys.map{ |k| "#{k}=#{line_attrs[k].inspect}" }.join(' ')
       end
     end
 

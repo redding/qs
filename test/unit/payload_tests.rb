@@ -13,9 +13,16 @@ module Qs::Payload
     end
     subject{ Qs::Payload }
 
+    should have_imeths :type_method_name
     should have_imeths :deserialize, :serialize
     should have_imeths :job, :job_hash
     should have_imeths :event, :event_hash
+
+    should "convert payload types to method names using `type_method_name`" do
+      assert_equal 'job',   subject.type_method_name(Qs::Job::PAYLOAD_TYPE)
+      assert_equal 'event', subject.type_method_name(Qs::Event::PAYLOAD_TYPE)
+      assert_raises(InvalidError){ subject.type_method_name(Factory.string) }
+    end
 
     should "serialize and deserialize messages" do
       message = Factory.message
