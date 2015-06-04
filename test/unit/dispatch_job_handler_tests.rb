@@ -78,7 +78,7 @@ module Qs::DispatchJobHandler
         "  params:       #{subject.event.params.inspect}",
         "  publisher:    #{subject.event.publisher}",
         "  published at: #{subject.event.published_at}",
-        "Found #{subject.subscribed_queue_names.size} subscribed queue(s)",
+        "Found #{subject.subscribed_queue_names.size} subscribed queue(s):",
         @queue_names.map{ |queue_name| "  => #{queue_name}" }
       ].flatten.join("\n")
       assert_equal exp, @logger_spy.messages.join("\n")
@@ -132,7 +132,7 @@ module Qs::DispatchJobHandler
         "  params:       #{subject.event.params.inspect}",
         "  publisher:    #{subject.event.publisher}",
         "  published at: #{subject.event.published_at}",
-        "Found #{subject.subscribed_queue_names.size} subscribed queue(s)",
+        "Found #{subject.subscribed_queue_names.size} subscribed queue(s):",
         @fail_queue_names.map{ |queue_name| "  => #{queue_name} (failed)" },
         @success_queue_names.map{ |queue_name| "  => #{queue_name}" },
         "Failed to dispatch the event to #{@fail_queue_names.size} subscribed queues",

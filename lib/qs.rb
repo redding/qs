@@ -3,6 +3,7 @@ require 'qs/version'
 require 'qs/client'
 require 'qs/daemon'
 require 'qs/dispatcher_queue'
+require 'qs/event_handler'
 require 'qs/job_handler'
 require 'qs/queue'
 
