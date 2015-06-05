@@ -126,7 +126,7 @@ module Qs
     end
 
     namespace :redis do
-      option :ip,   :default => 'localhost'
+      option :ip,   :default => '127.0.0.1'
       option :port, :default => 6379
       option :db,   :default => 0
 

@@ -256,7 +256,7 @@ module Qs
     end
 
     should "know its default redis options" do
-      assert_equal 'localhost', subject.redis.ip
+      assert_equal '127.0.0.1', subject.redis.ip
       assert_equal 6379,        subject.redis.port
       assert_equal 0,           subject.redis.db
       assert_equal 'qs',        subject.redis.redis_ns
