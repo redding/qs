@@ -36,7 +36,7 @@ module Qs
     should "allow configuring its config" do
       yielded = nil
       subject.configure{ |c| yielded = c }
-      assert_equal subject.config, yielded
+      assert_same subject.config, yielded
     end
 
     should "not have a client or redis connection by default" do
@@ -60,6 +60,11 @@ module Qs
       @module.config.redis.port = Factory.integer
       @module.config.redis.db   = Factory.integer
 
+      @dispatcher_queue_spy = nil
+      Assert.stub(DispatcherQueue, :new) do |*args|
+        @dispatcher_queue_spy = DispatcherQueueSpy.new(*args)
+      end
+
       @client_spy = nil
       Assert.stub(Client, :new) do |*args|
         @client_spy = ClientSpy.new(*args)
@@ -77,14 +82,15 @@ module Qs
       assert_equal expected, subject.config.redis.url
     end
 
-    should "know its dispatcher queue, dispatcher job name and event publisher" do
-      assert_instance_of Qs::Queue, subject.dispatcher_queue
-      exp = subject.config.dispatcher_name
-      assert_equal exp, subject.dispatcher_queue.name
-      exp = subject.config.dispatcher_job_name
-      assert_equal exp, subject.dispatcher_job_name
-      exp = subject.config.event_publisher
-      assert_equal exp, subject.event_publisher
+    should "build a dispatcher queue" do
+      assert_equal @dispatcher_queue_spy, subject.dispatcher_queue
+      exp = subject.config.dispatcher_queue_class
+      assert_equal exp, @dispatcher_queue_spy.queue_class
+      dispatcher_config = subject.config.dispatcher
+      assert_equal dispatcher_config.queue_name, @dispatcher_queue_spy.queue_name
+      assert_equal dispatcher_config.job_name,   @dispatcher_queue_spy.job_name
+      exp = dispatcher_config.job_handler_class_name
+      assert_equal exp, @dispatcher_queue_spy.job_handler_class_name
     end
 
     should "build a client" do
@@ -173,6 +179,13 @@ module Qs
       assert_equal event, call.event
     end
 
+    should "know its dispatcher job name and event publisher" do
+      exp = subject.config.dispatcher.job_name
+      assert_equal exp, subject.dispatcher_job_name
+      exp = subject.config.event_publisher
+      assert_equal exp, subject.event_publisher
+    end
+
     should "return the dispatcher queue published events using `published_events`" do
       queue = subject.dispatcher_queue
       published_events = Factory.integer(3).times.map{ Factory.string }
@@ -211,15 +224,10 @@ module Qs
     end
     subject{ @config }
 
-    should have_options :dispatcher_name, :dispatcher_job_name
     should have_options :encoder, :decoder, :timeout
     should have_options :event_publisher
-    should have_namespace :redis
-
-    should "know its default dispatcher name and job name" do
-      assert_equal 'dispatcher',     subject.dispatcher_name
-      assert_equal 'dispatch_event', subject.dispatcher_job_name
-    end
+    should have_namespace :dispatcher, :redis
+    should have_accessors :dispatcher_queue_class
 
     should "know its default decoder/encoder" do
       payload = { Factory.string => Factory.string }
@@ -237,6 +245,14 @@ module Qs
 
     should "not have a default event publisher" do
       assert_nil subject.event_publisher
+    end
+
+    should "know its default dispatcher options" do
+      assert_equal Queue, subject.dispatcher_queue_class
+      assert_equal 'dispatcher', subject.dispatcher.queue_name
+      assert_equal 'run_dispatch_job', subject.dispatcher.job_name
+      exp = DispatcherQueue::RunDispatchJob.to_s
+      assert_equal exp, subject.dispatcher.job_handler_class_name
     end
 
     should "know its default redis options" do
@@ -270,6 +286,19 @@ module Qs
       assert_nil subject.new(Factory.string, Factory.integer, nil)
     end
 
+  end
+
+  class DispatcherQueueSpy
+    attr_reader :queue_class, :queue_name
+    attr_reader :job_name, :job_handler_class_name
+    attr_reader :published_events
+
+    def initialize(options)
+      @queue_class            = options[:queue_class]
+      @queue_name             = options[:queue_name]
+      @job_name               = options[:job_name]
+      @job_handler_class_name = options[:job_handler_class_name]
+    end
   end
 
   class ClientSpy
