@@ -1,6 +1,6 @@
 require 'benchmark'
 require 'scmd'
-require 'bench/queue'
+require 'bench/setup'
 
 class BenchRunner
 
@@ -18,23 +18,37 @@ class BenchRunner
     @job_name       = 'multiply'
     @job_params     = { 'size' => 100_000 }
 
+    @number_of_events = ENV['NUM_EVENTS'] || 10_000
+    @event_channel    = 'something'
+    @event_name       = 'happened'
+    @event_params     = { 'size' => 100_000 }
+
     @progress_reader, @progress_writer = IO.pipe
 
     @results = {}
-
-    Qs.init
   end
 
   def run
     output "Running benchmark report..."
     output("\n", false)
 
-    benchmark_adding_jobs
+    Qs.client.clear(BenchQueue.redis_key)
+    Qs.client.clear(Qs.dispatcher_queue.redis_key)
+
+    benchmark_enqueueing_jobs
     benchmark_running_jobs
 
+    benchmark_publishing_events
+    benchmark_running_events
+
     size = @results.values.map(&:size).max
-    output "Adding #{@number_of_jobs} Jobs Time:  #{@results[:adding_jobs].rjust(size)}s"
-    output "Running #{@number_of_jobs} Jobs Time: #{@results[:running_jobs].rjust(size)}s"
+    output "\n", false
+    output "Enqueueing #{@number_of_jobs} Jobs Time: #{@results[:enqueueing_jobs].rjust(size)}"
+    output "Running #{@number_of_jobs} Jobs Time:    #{@results[:running_jobs].rjust(size)}"
+
+    output "\n", false
+    output "Publishing #{@number_of_events} Events Time: #{@results[:publishing_events].rjust(size)}"
+    output "Running #{@number_of_events} Events Time:    #{@results[:running_events].rjust(size)}"
 
     output "\n"
     output "Done running benchmark report"
@@ -42,15 +56,15 @@ class BenchRunner
 
   private
 
-  def benchmark_adding_jobs
-    output "Adding jobs"
+  def benchmark_enqueueing_jobs
+    output "Enqueuing jobs"
     benchmark = Benchmark.measure do
       (1..@number_of_jobs).each do |n|
         BenchQueue.add(@job_name, @job_params)
         output('.', false) if ((n - 1) % 100 == 0)
       end
     end
-    @results[:adding_jobs] = round_and_display(benchmark.real)
+    @results[:enqueueing_jobs] = round_and_display(benchmark.real)
     output("\n", false)
   end
 
@@ -78,10 +92,66 @@ class BenchRunner
         end
       end
       @results[:running_jobs] = round_and_display(benchmark.real)
-      output("\n", false)
     ensure
       cmd.kill('TERM')
       cmd.wait(5)
+    end
+
+    output("\n", false)
+  end
+
+  def benchmark_publishing_events
+    output "Publishing events"
+    benchmark = Benchmark.measure do
+      (1..@number_of_events).each do |n|
+        Qs.publish(@event_channel, @event_name, @event_params)
+        output('.', false) if ((n - 1) % 100 == 0)
+      end
+    end
+    @results[:publishing_events] = round_and_display(benchmark.real)
+    output("\n", false)
+  end
+
+  def benchmark_running_events
+    bench_queue_cmd_str = "bundle exec ./bin/qs bench/config.qs"
+    bench_queue_cmd = Scmd.new(bench_queue_cmd_str, {
+      'BENCH_REPORT'      => 'yes',
+      'BENCH_PROGRESS_IO' => @progress_writer.fileno
+    })
+
+    dispatcher_queue_cmd_str = "bundle exec ./bin/qs bench/dispatcher.qs"
+    dispatcher_queue_cmd = Scmd.new(dispatcher_queue_cmd_str, {
+      'BENCH_REPORT'      => 'yes',
+      'BENCH_PROGRESS_IO' => @progress_writer.fileno
+    })
+
+    output "Running events"
+    begin
+      benchmark = Benchmark.measure do
+        bench_queue_cmd.start
+        if !bench_queue_cmd.running?
+          raise "failed to start qs process: #{bench_queue_cmd_str.inspect}"
+        end
+
+        dispatcher_queue_cmd.start
+        if !dispatcher_queue_cmd.running?
+          raise "failed to start qs process: #{dispatcher_queue_cmd_str.inspect}"
+        end
+
+        progress = 0
+        while progress < @number_of_jobs
+          ::IO.select([@progress_reader])
+          result = @progress_reader.read_nonblock(1)
+          progress += 1
+          output(result, false) if ((progress - 1) % 100 == 0)
+        end
+      end
+      @results[:running_events] = round_and_display(benchmark.real)
+    ensure
+      dispatcher_queue_cmd.kill('TERM')
+      bench_queue_cmd.kill('TERM')
+      dispatcher_queue_cmd.wait(5)
+      bench_queue_cmd.wait(5)
     end
 
     output("\n", false)

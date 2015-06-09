@@ -28,7 +28,7 @@ module Qs
         logger.info "  params:       #{self.event.params.inspect}"
         logger.info "  publisher:    #{self.event.publisher}"
         logger.info "  published at: #{self.event.published_at}"
-        logger.info "Found #{self.subscribed_queue_names.size} subscribed queue(s)"
+        logger.info "Found #{self.subscribed_queue_names.size} subscribed queue(s):"
         self.subscribed_queue_names.each do |queue_name|
           qs_dispatch(queue_name, self.event)
         end
