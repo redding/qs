@@ -188,7 +188,19 @@ module Qs::Client
 
   end
 
-  class SyncSubscriptionsTests < RedisCallTests
+  class SubscriptionsSetupTests < RedisCallTests
+    setup do
+      @event_subs_keys = Factory.integer(3).times.map{ Factory.string }
+      @keys_pattern = nil
+      Assert.stub(@connection_spy.redis_spy, :keys) do |pattern|
+        @keys_pattern = pattern
+        @event_subs_keys
+      end
+    end
+
+  end
+
+  class SyncSubscriptionsTests < SubscriptionsSetupTests
     desc "sync_subscriptions"
     setup do
       Factory.integer(3).times.map{ @queue.event_route_names << Factory.string }
@@ -200,9 +212,23 @@ module Qs::Client
       assert_equal [:pipelined, :multi], calls.map(&:command)
     end
 
-    should "add the queue to each events subscribers" do
-      calls = @connection_spy.redis_calls[2..-1]
-      assert_equal @queue.event_route_names.size, calls.size
+    should "find all event subscribers keys" do
+      assert_equal Qs::Event::SubscribersRedisKey.new('*'), @keys_pattern
+    end
+
+    should "remove the queue from all events subscribers first" do
+      calls = @connection_spy.redis_calls[2, @event_subs_keys.size]
+      assert_equal @event_subs_keys.size, calls.size
+      assert_equal [:srem], calls.map(&:command).uniq
+      exp = @event_subs_keys.map{ |key| [key, @queue.name] }
+      assert_equal exp, calls.map(&:args)
+    end
+
+    should "remove and add the queue from events subscribers" do
+      start_at = 2 + @event_subs_keys.size
+      calls = @connection_spy.redis_calls[start_at..-1]
+      exp = @queue.event_route_names.size
+      assert_equal exp, calls.size
       assert_equal [:sadd], calls.map(&:command).uniq
       exp = @queue.event_route_names.map do |name|
         [Qs::Event::SubscribersRedisKey.new(name), @queue.name]
@@ -212,16 +238,9 @@ module Qs::Client
 
   end
 
-  class ClearSubscriptionsTests < RedisCallTests
+  class ClearSubscriptionsTests < SubscriptionsSetupTests
     desc "clear_subscriptions"
     setup do
-      @event_subs_keys = Factory.integer(3).times.map{ Factory.string }
-      @keys_pattern = nil
-      Assert.stub(@connection_spy.redis_spy, :keys) do |pattern|
-        @keys_pattern = pattern
-        @event_subs_keys
-      end
-
       subject.clear_subscriptions(@queue)
     end
 

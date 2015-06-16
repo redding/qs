@@ -73,10 +73,14 @@ module Qs
       end
 
       def sync_subscriptions(queue)
+        pattern = Qs::Event::SubscribersRedisKey.new('*')
+        all_event_subs_keys = self.redis.with{ |c| c.keys(pattern) }
+
         event_subs_keys = queue.event_route_names.map do |route_name|
           Qs::Event::SubscribersRedisKey.new(route_name)
         end
         redis_transaction do |c|
+          all_event_subs_keys.each{ |key| c.srem(key, queue.name) }
           event_subs_keys.each{ |key| c.sadd(key, queue.name) }
         end
       end
