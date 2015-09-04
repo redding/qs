@@ -148,13 +148,19 @@ module Qs::Daemon
   class InitTests < InitSetupTests
     desc "when init"
     setup do
+      @current_env_process_label = ENV['QS_PROCESS_LABEL']
+      ENV['QS_PROCESS_LABEL'] = Factory.string
+
       @daemon = @daemon_class.new
+    end
+    teardown do
+      ENV['QS_PROCESS_LABEL'] = @current_env_process_label
     end
     subject{ @daemon }
 
     should have_readers :daemon_data, :logger
     should have_readers :signals_redis_key, :queue_redis_keys
-    should have_imeths :name, :pid_file
+    should have_imeths :name, :process_label, :pid_file
     should have_imeths :running?
     should have_imeths :start, :stop, :halt
 
@@ -172,6 +178,7 @@ module Qs::Daemon
 
       assert_instance_of Qs::DaemonData, data
       assert_equal configuration.name,             data.name
+      assert_equal configuration.process_label,    data.process_label
       assert_equal configuration.pid_file,         data.pid_file
       assert_equal configuration.min_workers,      data.min_workers
       assert_equal configuration.max_workers,      data.max_workers
@@ -190,10 +197,11 @@ module Qs::Daemon
       assert_equal data.queue_redis_keys, subject.queue_redis_keys
     end
 
-    should "know its name and pid file" do
+    should "know its name, process label and pid file" do
       data = subject.daemon_data
-      assert_equal data.name,     subject.name
-      assert_equal data.pid_file, subject.pid_file
+      assert_equal data.name,          subject.name
+      assert_equal data.process_label, subject.process_label
+      assert_equal data.pid_file,      subject.pid_file
     end
 
     should "build a client" do
@@ -549,6 +557,7 @@ module Qs::Daemon
     should have_options :min_workers, :max_workers
     should have_options :verbose_logging, :logger
     should have_options :shutdown_timeout
+    should have_accessors :process_label
     should have_accessors :init_procs, :error_procs
     should have_accessors :queues
     should have_imeths :routes
@@ -559,7 +568,7 @@ module Qs::Daemon
       assert_includes NsOptions::Proxy, subject.class
     end
 
-    should "default its options" do
+    should "default its options and attrs" do
       config = Configuration.new
       assert_nil config.name
       assert_nil config.pid_file
@@ -568,10 +577,30 @@ module Qs::Daemon
       assert_true config.verbose_logging
       assert_instance_of Qs::NullLogger, config.logger
       assert_nil subject.shutdown_timeout
+
+      assert_nil config.process_label
       assert_equal [], config.init_procs
       assert_equal [], config.error_procs
       assert_equal [], config.queues
       assert_equal [], config.routes
+    end
+
+    should "prefer an env var for the label but fall back to the name option" do
+      current_env_process_label = ENV['QS_PROCESS_LABEL']
+
+      ENV['QS_PROCESS_LABEL'] = Factory.string
+      config = Configuration.new(:name => Factory.string)
+      assert_equal ENV['QS_PROCESS_LABEL'], config.process_label
+
+      ENV['QS_PROCESS_LABEL'] = ''
+      config = Configuration.new(:name => Factory.string)
+      assert_equal config.name, config.process_label
+
+      ENV.delete('QS_PROCESS_LABEL')
+      config = Configuration.new(:name => Factory.string)
+      assert_equal config.name, config.process_label
+
+      ENV['QS_PROCESS_LABEL'] = current_env_process_label
     end
 
     should "not be valid by default" do
@@ -582,12 +611,15 @@ module Qs::Daemon
       assert_equal subject.queues.map(&:routes).flatten, subject.routes
     end
 
-    should "include its error procs, queue redis keys and routes in its hash" do
+    should "include some attrs (not just the options) in its hash" do
       config_hash = subject.to_hash
-      assert_equal subject.error_procs, config_hash[:error_procs]
-      expected = subject.queues.map(&:redis_key)
-      assert_equal expected, config_hash[:queue_redis_keys]
-      assert_equal subject.routes, config_hash[:routes]
+
+      assert_equal subject.process_label, config_hash[:process_label]
+      assert_equal subject.error_procs,   config_hash[:error_procs]
+      assert_equal subject.routes,        config_hash[:routes]
+
+      exp = subject.queues.map(&:redis_key)
+      assert_equal exp, config_hash[:queue_redis_keys]
     end
 
     should "call its init procs when validated" do

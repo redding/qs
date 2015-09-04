@@ -63,6 +63,10 @@ module Qs
         @daemon_data.name
       end
 
+      def process_label
+        @daemon_data.process_label
+      end
+
       def pid_file
         @daemon_data.pid_file
       end
@@ -286,11 +290,13 @@ module Qs
 
       option :shutdown_timeout
 
+      attr_accessor :process_label
       attr_accessor :init_procs, :error_procs
       attr_accessor :queues
 
       def initialize(values = nil)
         super(values)
+        @process_label = (v = ENV['QS_PROCESS_LABEL']) && !v.to_s.empty? ? v : self.name
         @init_procs, @error_procs = [], []
         @queues = []
         @valid = nil
@@ -302,9 +308,10 @@ module Qs
 
       def to_hash
         super.merge({
+          :process_label    => self.process_label,
           :error_procs      => self.error_procs,
-          :queue_redis_keys => self.queues.map(&:redis_key),
-          :routes           => self.routes
+          :routes           => self.routes,
+          :queue_redis_keys => self.queues.map(&:redis_key)
         })
       end
 

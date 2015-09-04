@@ -23,6 +23,6 @@ Gem::Specification.new do |gem|
   gem.add_dependency("ns-options",      ["~> 1.1"])
   gem.add_dependency("SystemTimer",     ["~> 1.2"])
 
-  gem.add_development_dependency("assert", ["~> 2.14"])
+  gem.add_development_dependency("assert", ["~> 2.15"])
   gem.add_development_dependency("scmd",   ["~> 2.3"])
 end
