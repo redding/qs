@@ -22,9 +22,7 @@ class Qs::Process
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @current_env_process_label  = ENV['QS_PROCESS_LABEL']
       @current_env_skip_daemonize = ENV['QS_SKIP_DAEMONIZE']
-      ENV.delete('QS_PROCESS_LABEL')
       ENV.delete('QS_SKIP_DAEMONIZE')
 
       @daemon_spy = DaemonSpy.new
@@ -41,7 +39,6 @@ class Qs::Process
     end
     teardown do
       ENV['QS_SKIP_DAEMONIZE'] = @current_env_skip_daemonize
-      ENV['QS_PROCESS_LABEL']  = @current_env_process_label
     end
     subject{ @process }
 
@@ -54,23 +51,11 @@ class Qs::Process
     end
 
     should "know its name, pid file, signal io and restart cmd" do
-      assert_equal "qs: #{@daemon_spy.name}", subject.name
+      assert_equal "qs: #{@daemon_spy.process_label}", subject.name
       assert_equal @pid_file_spy, subject.pid_file
       assert_instance_of Qs::IOPipe, subject.signal_io
       assert_equal @restart_cmd_spy, subject.restart_cmd
     end
-
-    should "set its name using env vars" do
-      ENV['QS_PROCESS_LABEL'] = Factory.string
-      process = @process_class.new(@daemon_spy)
-      assert_equal "qs: #{ENV['QS_PROCESS_LABEL']}", process.name
-    end
-
-    should "ignore blank env values for its name" do
-      ENV['QS_PROCESS_LABEL'] = ''
-      process = @process_class.new(@daemon_spy)
-      assert_equal "qs: #{@daemon_spy.name}", process.name
-     end
 
     should "not daemonize by default" do
       process = @process_class.new(@daemon_spy)
@@ -415,11 +400,15 @@ class Qs::Process
 
     queue Qs::Queue.new{ name Factory.string }
 
+    attr_accessor :process_label
     attr_accessor :start_called, :stop_called, :halt_called
     attr_reader :start_args, :stop_args, :halt_args
 
     def initialize(*args)
       super
+
+      @process_label = Factory.string
+
       @start_args   = nil
       @start_called = false
       @stop_args    = nil

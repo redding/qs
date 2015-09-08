@@ -17,8 +17,7 @@ module Qs
     def initialize(daemon, options = nil)
       options ||= {}
       @daemon = daemon
-      process_label = ignore_if_blank(ENV['QS_PROCESS_LABEL']) || @daemon.name
-      @name   = "qs: #{process_label}"
+      @name   = "qs: #{@daemon.process_label}"
       @logger = @daemon.logger
 
       @pid_file    = PIDFile.new(@daemon.pid_file)

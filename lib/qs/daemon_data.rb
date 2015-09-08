@@ -7,7 +7,7 @@ module Qs
     # options one time here and memoize their values. This way, we don't pay the
     # NsOptions overhead when reading them while handling a message.
 
-    attr_reader :name
+    attr_reader :name, :process_label
     attr_reader :pid_file
     attr_reader :min_workers, :max_workers
     attr_reader :logger, :verbose_logging
@@ -18,6 +18,7 @@ module Qs
     def initialize(args = nil)
       args ||= {}
       @name             = args[:name]
+      @process_label    = args[:process_label]
       @pid_file         = args[:pid_file]
       @min_workers      = args[:min_workers]
       @max_workers      = args[:max_workers]
