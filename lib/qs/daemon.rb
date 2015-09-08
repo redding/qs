@@ -133,10 +133,19 @@ module Qs
           self.daemon_data.min_workers,
           self.daemon_data.max_workers
         ){ |queue_item| process(queue_item) }
+
+        # add internal callbacks
         wp.on_worker_error do |worker, exception, queue_item|
           handle_worker_exception(exception, queue_item)
         end
         wp.on_worker_sleep{ @worker_available_io.write(SIGNAL) }
+
+        # add any configured callbacks
+        self.daemon_data.worker_start_procs.each{ |cb| wp.on_worker_start(&cb) }
+        self.daemon_data.worker_shutdown_procs.each{ |cb|  wp.on_worker_shutdown(&cb) }
+        self.daemon_data.worker_sleep_procs.each{ |cb| wp.on_worker_sleep(&cb) }
+        self.daemon_data.worker_wakeup_procs.each{ |cb| wp.on_worker_wakeup(&cb) }
+
         wp.start
         wp
       end
@@ -250,6 +259,22 @@ module Qs
         self.max_workers(*args)
       end
 
+      def on_worker_start(&block)
+        self.configuration.worker_start_procs << block
+      end
+
+      def on_worker_shutdown(&block)
+        self.configuration.worker_shutdown_procs << block
+      end
+
+      def on_worker_sleep(&block)
+        self.configuration.worker_sleep_procs << block
+      end
+
+      def on_worker_wakeup(&block)
+        self.configuration.worker_wakeup_procs << block
+      end
+
       def verbose_logging(*args)
         self.configuration.verbose_logging(*args)
       end
@@ -293,13 +318,17 @@ module Qs
       attr_accessor :process_label
       attr_accessor :init_procs, :error_procs
       attr_accessor :queues
+      attr_reader :worker_start_procs, :worker_shutdown_procs
+      attr_reader :worker_sleep_procs, :worker_wakeup_procs
 
       def initialize(values = nil)
         super(values)
         @process_label = !(v = ENV['QS_PROCESS_LABEL'].to_s).empty? ? v : self.name
         @init_procs, @error_procs = [], []
+        @worker_start_procs, @worker_shutdown_procs = [], []
+        @worker_sleep_procs, @worker_wakeup_procs   = [], []
         @queues = []
-        @valid = nil
+        @valid  = nil
       end
 
       def routes
@@ -308,10 +337,14 @@ module Qs
 
       def to_hash
         super.merge({
-          :process_label    => self.process_label,
-          :error_procs      => self.error_procs,
-          :routes           => self.routes,
-          :queue_redis_keys => self.queues.map(&:redis_key)
+          :process_label         => self.process_label,
+          :error_procs           => self.error_procs,
+          :worker_start_procs    => self.worker_start_procs,
+          :worker_shutdown_procs => self.worker_shutdown_procs,
+          :worker_sleep_procs    => self.worker_sleep_procs,
+          :worker_wakeup_procs   => self.worker_wakeup_procs,
+          :routes                => self.routes,
+          :queue_redis_keys      => self.queues.map(&:redis_key)
         })
       end
 
