@@ -296,7 +296,7 @@ module Qs
 
       def initialize(values = nil)
         super(values)
-        @process_label = (v = ENV['QS_PROCESS_LABEL']) && !v.to_s.empty? ? v : self.name
+        @process_label = !(v = ENV['QS_PROCESS_LABEL'].to_s).empty? ? v : self.name
         @init_procs, @error_procs = [], []
         @queues = []
         @valid = nil
