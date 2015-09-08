@@ -10,6 +10,8 @@ module Qs
     attr_reader :name, :process_label
     attr_reader :pid_file
     attr_reader :min_workers, :max_workers
+    attr_reader :worker_start_procs, :worker_shutdown_procs
+    attr_reader :worker_sleep_procs, :worker_wakeup_procs
     attr_reader :logger, :verbose_logging
     attr_reader :shutdown_timeout
     attr_reader :error_procs
@@ -17,17 +19,21 @@ module Qs
 
     def initialize(args = nil)
       args ||= {}
-      @name             = args[:name]
-      @process_label    = args[:process_label]
-      @pid_file         = args[:pid_file]
-      @min_workers      = args[:min_workers]
-      @max_workers      = args[:max_workers]
-      @logger           = args[:logger]
-      @verbose_logging  = !!args[:verbose_logging]
-      @shutdown_timeout = args[:shutdown_timeout]
-      @error_procs      = args[:error_procs] || []
-      @queue_redis_keys = args[:queue_redis_keys] || []
-      @routes           = build_routes(args[:routes] || [])
+      @name                  = args[:name]
+      @process_label         = args[:process_label]
+      @pid_file              = args[:pid_file]
+      @min_workers           = args[:min_workers]
+      @max_workers           = args[:max_workers]
+      @worker_start_procs    = args[:worker_start_procs]
+      @worker_shutdown_procs = args[:worker_shutdown_procs]
+      @worker_sleep_procs    = args[:worker_sleep_procs]
+      @worker_wakeup_procs   = args[:worker_wakeup_procs]
+      @logger                = args[:logger]
+      @verbose_logging       = !!args[:verbose_logging]
+      @shutdown_timeout      = args[:shutdown_timeout]
+      @error_procs           = args[:error_procs] || []
+      @queue_redis_keys      = args[:queue_redis_keys] || []
+      @routes                = build_routes(args[:routes] || [])
     end
 
     def route_for(route_id)

@@ -20,6 +20,8 @@ module Qs::Daemon
     should have_imeths :configuration
     should have_imeths :name, :pid_file
     should have_imeths :min_workers, :max_workers, :workers
+    should have_imeths :on_worker_start, :on_worker_shutdown
+    should have_imeths :on_worker_sleep, :on_worker_wakeup
     should have_imeths :verbose_logging, :logger
     should have_imeths :shutdown_timeout
     should have_imeths :init, :error, :queue
@@ -68,6 +70,22 @@ module Qs::Daemon
       assert_equal new_workers, subject.max_workers
     end
 
+    should "allow reading/writing its configuration worker procs" do
+      p = proc{}
+
+      subject.on_worker_start(&p)
+      assert_equal [p], subject.configuration.worker_start_procs
+
+      subject.on_worker_shutdown(&p)
+      assert_equal [p], subject.configuration.worker_shutdown_procs
+
+      subject.on_worker_sleep(&p)
+      assert_equal [p], subject.configuration.worker_sleep_procs
+
+      subject.on_worker_wakeup(&p)
+      assert_equal [p], subject.configuration.worker_wakeup_procs
+    end
+
     should "allow reading/writing its configuration verbose logging" do
       new_verbose = Factory.boolean
       subject.verbose_logging(new_verbose)
@@ -114,16 +132,26 @@ module Qs::Daemon
       @qs_init_called = false
       Assert.stub(Qs, :init){ @qs_init_called = true }
 
-      @queue = Qs::Queue.new do
-        name(Factory.string)
-        job 'test', TestHandler.to_s
-      end
       @daemon_class.name Factory.string
       @daemon_class.pid_file Factory.file_path
       @daemon_class.workers Factory.integer
       @daemon_class.verbose_logging Factory.boolean
       @daemon_class.shutdown_timeout Factory.integer
       @daemon_class.error{ Factory.string }
+
+      @start_procs    = Factory.integer(3).times.map{ proc{} }
+      @shutdown_procs = Factory.integer(3).times.map{ proc{} }
+      @sleep_procs    = Factory.integer(3).times.map{ proc{} }
+      @wakeup_procs   = Factory.integer(3).times.map{ proc{} }
+      @start_procs.each    { |p| @daemon_class.on_worker_start(&p) }
+      @shutdown_procs.each { |p| @daemon_class.on_worker_shutdown(&p) }
+      @sleep_procs.each    { |p| @daemon_class.on_worker_sleep(&p) }
+      @wakeup_procs.each   { |p| @daemon_class.on_worker_wakeup(&p) }
+
+      @queue = Qs::Queue.new do
+        name(Factory.string)
+        job 'test', TestHandler.to_s
+      end
       @daemon_class.queue @queue
 
       @client_spy = nil
@@ -177,16 +205,24 @@ module Qs::Daemon
       data = subject.daemon_data
 
       assert_instance_of Qs::DaemonData, data
-      assert_equal configuration.name,             data.name
-      assert_equal configuration.process_label,    data.process_label
-      assert_equal configuration.pid_file,         data.pid_file
-      assert_equal configuration.min_workers,      data.min_workers
-      assert_equal configuration.max_workers,      data.max_workers
+      assert_equal configuration.name,          data.name
+      assert_equal configuration.process_label, data.process_label
+      assert_equal configuration.pid_file,      data.pid_file
+      assert_equal configuration.min_workers,   data.min_workers
+      assert_equal configuration.max_workers,   data.max_workers
+
+      assert_equal configuration.worker_start_procs,    data.worker_start_procs
+      assert_equal configuration.worker_shutdown_procs, data.worker_shutdown_procs
+      assert_equal configuration.worker_sleep_procs,    data.worker_sleep_procs
+      assert_equal configuration.worker_wakeup_procs,   data.worker_wakeup_procs
+
       assert_equal configuration.verbose_logging,  data.verbose_logging
       assert_equal configuration.shutdown_timeout, data.shutdown_timeout
       assert_equal configuration.error_procs,      data.error_procs
-      assert_equal [@queue.redis_key], data.queue_redis_keys
+
+      assert_equal [@queue.redis_key],   data.queue_redis_keys
       assert_equal configuration.routes, data.routes.values
+
       assert_instance_of configuration.logger.class, data.logger
     end
 
@@ -250,8 +286,22 @@ module Qs::Daemon
       assert_not_nil @worker_pool_spy
       assert_equal @daemon_class.min_workers, @worker_pool_spy.min_workers
       assert_equal @daemon_class.max_workers, @worker_pool_spy.max_workers
-      assert_equal 1, @worker_pool_spy.on_worker_error_callbacks.size
-      assert_equal 1, @worker_pool_spy.on_worker_sleep_callbacks.size
+
+      exp = 1
+      assert_equal exp, @worker_pool_spy.on_worker_error_callbacks.size
+
+      exp = @start_procs.size
+      assert_equal exp, @worker_pool_spy.on_worker_start_callbacks.size
+
+      exp = @shutdown_procs.size
+      assert_equal exp, @worker_pool_spy.on_worker_shutdown_callbacks.size
+
+      exp = @sleep_procs.size + 1 # configured plus 1 internal
+      assert_equal exp, @worker_pool_spy.on_worker_sleep_callbacks.size
+
+      exp = @wakeup_procs.size
+      assert_equal exp, @worker_pool_spy.on_worker_wakeup_callbacks.size
+
       assert_true @worker_pool_spy.start_called
     end
 
@@ -560,6 +610,8 @@ module Qs::Daemon
     should have_accessors :process_label
     should have_accessors :init_procs, :error_procs
     should have_accessors :queues
+    should have_readers :worker_start_procs, :worker_shutdown_procs
+    should have_readers :worker_sleep_procs, :worker_wakeup_procs
     should have_imeths :routes
     should have_imeths :to_hash
     should have_imeths :valid?, :validate!
@@ -581,6 +633,10 @@ module Qs::Daemon
       assert_nil config.process_label
       assert_equal [], config.init_procs
       assert_equal [], config.error_procs
+      assert_equal [], subject.worker_start_procs
+      assert_equal [], subject.worker_shutdown_procs
+      assert_equal [], subject.worker_sleep_procs
+      assert_equal [], subject.worker_wakeup_procs
       assert_equal [], config.queues
       assert_equal [], config.routes
     end
@@ -620,6 +676,11 @@ module Qs::Daemon
 
       exp = subject.queues.map(&:redis_key)
       assert_equal exp, config_hash[:queue_redis_keys]
+
+      assert_equal subject.worker_start_procs,    config_hash[:worker_start_procs]
+      assert_equal subject.worker_shutdown_procs, config_hash[:worker_shutdown_procs]
+      assert_equal subject.worker_sleep_procs,    config_hash[:worker_sleep_procs]
+      assert_equal subject.worker_wakeup_procs,   config_hash[:worker_wakeup_procs]
     end
 
     should "call its init procs when validated" do

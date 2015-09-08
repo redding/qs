@@ -14,28 +14,36 @@ class Qs::DaemonData
       @pid_file         = Factory.file_path
       @min_workers      = Factory.integer
       @max_workers      = Factory.integer
+      @start_procs      = Factory.integer(3).times.map{ proc{} }
+      @shutdown_procs   = Factory.integer(3).times.map{ proc{} }
+      @sleep_procs      = Factory.integer(3).times.map{ proc{} }
+      @wakeup_procs     = Factory.integer(3).times.map{ proc{} }
       @logger           = Factory.string
       @verbose_logging  = Factory.boolean
       @shutdown_timeout = Factory.integer
       @error_procs      = [ proc{ Factory.string } ]
-      @queue_redis_keys = (0..Factory.integer(3)).map{ Factory.string }
+      @queue_redis_keys = Factory.integer(3).times.map{ Factory.string }
 
       @routes = (0..Factory.integer(3)).map do
         Qs::Route.new(Factory.string, TestHandler.to_s).tap(&:validate!)
       end
 
       @daemon_data = Qs::DaemonData.new({
-        :name             => @name,
-        :process_label    => @process_label,
-        :pid_file         => @pid_file,
-        :min_workers      => @min_workers,
-        :max_workers      => @max_workers,
-        :logger           => @logger,
-        :verbose_logging  => @verbose_logging,
-        :shutdown_timeout => @shutdown_timeout,
-        :error_procs      => @error_procs,
-        :queue_redis_keys => @queue_redis_keys,
-        :routes           => @routes
+        :name                  => @name,
+        :process_label         => @process_label,
+        :pid_file              => @pid_file,
+        :min_workers           => @min_workers,
+        :max_workers           => @max_workers,
+        :worker_start_procs    => @start_procs,
+        :worker_shutdown_procs => @shutdown_procs,
+        :worker_sleep_procs    => @sleep_procs,
+        :worker_wakeup_procs   => @wakeup_procs,
+        :logger                => @logger,
+        :verbose_logging       => @verbose_logging,
+        :shutdown_timeout      => @shutdown_timeout,
+        :error_procs           => @error_procs,
+        :queue_redis_keys      => @queue_redis_keys,
+        :routes                => @routes
       })
     end
     subject{ @daemon_data }
@@ -43,6 +51,8 @@ class Qs::DaemonData
     should have_readers :name, :process_label
     should have_readers :pid_file
     should have_readers :min_workers, :max_workers
+    should have_readers :worker_start_procs, :worker_shutdown_procs
+    should have_readers :worker_sleep_procs, :worker_wakeup_procs
     should have_readers :logger, :verbose_logging
     should have_readers :shutdown_timeout
     should have_readers :error_procs
@@ -55,6 +65,10 @@ class Qs::DaemonData
       assert_equal @pid_file,         subject.pid_file
       assert_equal @min_workers,      subject.min_workers
       assert_equal @max_workers,      subject.max_workers
+      assert_equal @start_procs,      subject.worker_start_procs
+      assert_equal @shutdown_procs,   subject.worker_shutdown_procs
+      assert_equal @sleep_procs,      subject.worker_sleep_procs
+      assert_equal @wakeup_procs,     subject.worker_wakeup_procs
       assert_equal @logger,           subject.logger
       assert_equal @verbose_logging,  subject.verbose_logging
       assert_equal @shutdown_timeout, subject.shutdown_timeout
