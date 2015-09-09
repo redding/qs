@@ -141,10 +141,10 @@ module Qs
         wp.on_worker_sleep{ @worker_available_io.write(SIGNAL) }
 
         # add any configured callbacks
-        self.daemon_data.worker_start_procs.each{ |cb| wp.on_worker_start(&cb) }
-        self.daemon_data.worker_shutdown_procs.each{ |cb|  wp.on_worker_shutdown(&cb) }
-        self.daemon_data.worker_sleep_procs.each{ |cb| wp.on_worker_sleep(&cb) }
-        self.daemon_data.worker_wakeup_procs.each{ |cb| wp.on_worker_wakeup(&cb) }
+        self.daemon_data.worker_start_procs.each{ |p| wp.on_worker_start(&p) }
+        self.daemon_data.worker_shutdown_procs.each{ |p|  wp.on_worker_shutdown(&p) }
+        self.daemon_data.worker_sleep_procs.each{ |p| wp.on_worker_sleep(&p) }
+        self.daemon_data.worker_wakeup_procs.each{ |p| wp.on_worker_wakeup(&p) }
 
         wp.start
         wp
