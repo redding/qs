@@ -757,6 +757,24 @@ module Qs::Daemon
 
   end
 
+  class WorkerAvailableTests < UnitTests
+    desc "WorkerAvailable"
+    setup do
+      @worker_available = WorkerAvailable.new
+    end
+    subject{ @worker_available }
+
+    should have_imeths :wait, :signal
+
+    should "allow waiting and signalling" do
+      thread = Thread.new{ subject.wait }
+      assert_equal 'sleep', thread.status
+      subject.signal
+      assert_equal false, thread.status # dead, done running
+    end
+
+  end
+
   TestHandler = Class.new
 
   class PayloadHandlerSpy
