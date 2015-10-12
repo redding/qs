@@ -4,7 +4,10 @@ require 'bench/setup'
 
 class BenchRunner
 
-  TIME_MODIFIER = 10 ** 4 # 4 decimal places
+  BUNDLE_EXEC        = "bundle exec --keep-file-descriptors".freeze
+  RUN_QS_BENCH_QUEUE = "#{BUNDLE_EXEC} ./bin/qs bench/config.qs".freeze
+  RUN_QS_DISPATCHER  = "#{BUNDLE_EXEC} ./bin/qs bench/dispatcher.qs".freeze
+  TIME_MODIFIER      = 10 ** 4 # 4 decimal places
 
   def initialize
     output_file_path = if ENV['OUTPUT_FILE']
@@ -24,6 +27,13 @@ class BenchRunner
     @event_params     = { 'size' => 100_000 }
 
     @progress_reader, @progress_writer = IO.pipe
+    @run_qs_scmd_opts = {
+      :env => {
+        'BENCH_REPORT'      => 'yes',
+        'BENCH_PROGRESS_IO' => @progress_writer.fileno.to_s
+      },
+      :options => { @progress_writer => @progress_writer }
+    }
 
     @results = {}
   end
@@ -69,11 +79,7 @@ class BenchRunner
   end
 
   def benchmark_running_jobs
-    cmd_str = "bundle exec ./bin/qs bench/config.qs"
-    cmd = Scmd.new(cmd_str, {
-      'BENCH_REPORT'      => 'yes',
-      'BENCH_PROGRESS_IO' => @progress_writer.fileno
-    })
+    cmd = Scmd.new(RUN_QS_BENCH_QUEUE, @run_qs_scmd_opts)
 
     output "Running jobs"
     begin
@@ -113,17 +119,8 @@ class BenchRunner
   end
 
   def benchmark_running_events
-    bench_queue_cmd_str = "bundle exec ./bin/qs bench/config.qs"
-    bench_queue_cmd = Scmd.new(bench_queue_cmd_str, {
-      'BENCH_REPORT'      => 'yes',
-      'BENCH_PROGRESS_IO' => @progress_writer.fileno
-    })
-
-    dispatcher_queue_cmd_str = "bundle exec ./bin/qs bench/dispatcher.qs"
-    dispatcher_queue_cmd = Scmd.new(dispatcher_queue_cmd_str, {
-      'BENCH_REPORT'      => 'yes',
-      'BENCH_PROGRESS_IO' => @progress_writer.fileno
-    })
+    bench_queue_cmd      = Scmd.new(RUN_QS_BENCH_QUEUE, @run_qs_scmd_opts)
+    dispatcher_queue_cmd = Scmd.new(RUN_QS_DISPATCHER, @run_qs_scmd_opts)
 
     output "Running events"
     begin
