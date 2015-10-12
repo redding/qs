@@ -6,7 +6,6 @@ require 'thread'
 require 'qs'
 require 'qs/client'
 require 'qs/daemon_data'
-require 'qs/io_pipe'
 require 'qs/logger'
 require 'qs/payload_handler'
 require 'qs/queue_item'
@@ -52,8 +51,8 @@ module Qs
         @signals_redis_key = "signals:#{@daemon_data.name}-" \
                              "#{Socket.gethostname}-#{::Process.pid}"
 
-        @worker_available_io = IOPipe.new
-        @signal = Signal.new(:stop)
+        @worker_available = WorkerAvailable.new
+        @signal           = Signal.new(:stop)
       rescue InvalidError => exception
         exception.set_backtrace(caller)
         raise exception
@@ -106,7 +105,7 @@ module Qs
 
       def work_loop
         log "Starting work loop", :debug
-        setup_redis_and_ios
+        setup_redis
         @worker_pool = build_worker_pool
         process_inputs while @signal.start?
         log "Stopping work loop", :debug
@@ -117,15 +116,13 @@ module Qs
         log exception.backtrace.join("\n"), :error
       ensure
         shutdown_worker_pool
-        @worker_available_io.teardown
         @work_loop_thread = nil
         log "Stopped work loop", :debug
       end
 
-      def setup_redis_and_ios
+      def setup_redis
         # clear any signals that are already on the signals redis list
         @client.clear(self.signals_redis_key)
-        @worker_available_io.setup
       end
 
       def build_worker_pool
@@ -138,7 +135,7 @@ module Qs
         wp.on_worker_error do |worker, exception, queue_item|
           handle_worker_exception(exception, queue_item)
         end
-        wp.on_worker_sleep{ @worker_available_io.write(SIGNAL) }
+        wp.on_worker_sleep{ @worker_available.signal }
 
         # add any configured callbacks
         self.daemon_data.worker_start_procs.each{ |p| wp.on_worker_start(&p) }
@@ -177,8 +174,7 @@ module Qs
 
       def wait_for_available_worker
         if !@worker_pool.worker_available? && @signal.start?
-          @worker_available_io.wait
-          @worker_available_io.read
+          @worker_available.wait
         end
       end
 
@@ -203,7 +199,7 @@ module Qs
 
       def wakeup_work_loop_thread
         @client.append(self.signals_redis_key, SIGNAL)
-        @worker_available_io.write(SIGNAL)
+        @worker_available.signal
       end
 
       # * This only catches errors that happen outside of running the payload
@@ -360,6 +356,21 @@ module Qs
         end
         self.routes.each(&:validate!)
         @valid = true
+      end
+    end
+
+    class WorkerAvailable
+      def initialize
+        @mutex = Mutex.new
+        @cv    = ConditionVariable.new
+      end
+
+      def wait
+        @mutex.synchronize{ @cv.wait(@mutex) }
+      end
+
+      def signal
+        @mutex.synchronize{ @cv.signal }
       end
     end
 
