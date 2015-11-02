@@ -10,7 +10,8 @@ module Factory
     klass ||= StandardError
     message ||= Factory.text
     exception = nil
-    begin; raise(klass, message); rescue StandardError => exception; end
+    begin; raise(klass, message); rescue klass => exception; end
+    exception.set_backtrace(nil) if Factory.boolean
     exception
   end
 

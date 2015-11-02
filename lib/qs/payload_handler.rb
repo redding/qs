@@ -99,7 +99,7 @@ module Qs
     end
 
     def log_exception(exception)
-      backtrace = exception.backtrace.join("\n")
+      backtrace = (exception.backtrace || []).join("\n")
       message = "#{exception.class}: #{exception.message}\n#{backtrace}"
       log_verbose(message, :error)
     end

@@ -219,7 +219,7 @@ module Qs
           log "Worker error after message was processed, ignoring", :error
         end
         log "#{exception.class}: #{exception.message}", :error
-        log exception.backtrace.join("\n"), :error
+        log (exception.backtrace || []).join("\n"), :error
       end
 
       def log(message, level = :info)
