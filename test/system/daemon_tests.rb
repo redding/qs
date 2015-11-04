@@ -270,6 +270,24 @@ module Qs::Daemon
 
   end
 
+  class WithEnvProcessLabelTests < SystemTests
+    desc "with a process label env var"
+    setup do
+      ENV['QS_PROCESS_LABEL'] = Factory.string
+
+      @daemon = AppDaemon.new
+    end
+    teardown do
+      ENV.delete('QS_PROCESS_LABEL')
+    end
+    subject{ @daemon }
+
+    should "set the daemons process label to the env var" do
+      assert_equal ENV['QS_PROCESS_LABEL'], subject.process_label
+    end
+
+  end
+
   class DaemonRunner
     def initialize(app_daemon, dispatcher_daemon = nil)
       @app_daemon = app_daemon

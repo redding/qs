@@ -176,13 +176,7 @@ module Qs::Daemon
   class InitTests < InitSetupTests
     desc "when init"
     setup do
-      @current_env_process_label = ENV['QS_PROCESS_LABEL']
-      ENV['QS_PROCESS_LABEL'] = Factory.string
-
       @daemon = @daemon_class.new
-    end
-    teardown do
-      ENV['QS_PROCESS_LABEL'] = @current_env_process_label
     end
     subject{ @daemon }
 
@@ -205,11 +199,10 @@ module Qs::Daemon
       data = subject.daemon_data
 
       assert_instance_of Qs::DaemonData, data
-      assert_equal configuration.name,          data.name
-      assert_equal configuration.process_label, data.process_label
-      assert_equal configuration.pid_file,      data.pid_file
-      assert_equal configuration.min_workers,   data.min_workers
-      assert_equal configuration.max_workers,   data.max_workers
+      assert_equal configuration.name,        data.name
+      assert_equal configuration.pid_file,    data.pid_file
+      assert_equal configuration.min_workers, data.min_workers
+      assert_equal configuration.max_workers, data.max_workers
 
       assert_equal configuration.worker_start_procs,    data.worker_start_procs
       assert_equal configuration.worker_shutdown_procs, data.worker_shutdown_procs
@@ -607,7 +600,6 @@ module Qs::Daemon
     should have_options :min_workers, :max_workers
     should have_options :verbose_logging, :logger
     should have_options :shutdown_timeout
-    should have_accessors :process_label
     should have_accessors :init_procs, :error_procs
     should have_accessors :queues
     should have_readers :worker_start_procs, :worker_shutdown_procs
@@ -630,7 +622,6 @@ module Qs::Daemon
       assert_instance_of Qs::NullLogger, config.logger
       assert_nil subject.shutdown_timeout
 
-      assert_nil config.process_label
       assert_equal [], config.init_procs
       assert_equal [], config.error_procs
       assert_equal [], subject.worker_start_procs
@@ -639,24 +630,6 @@ module Qs::Daemon
       assert_equal [], subject.worker_wakeup_procs
       assert_equal [], config.queues
       assert_equal [], config.routes
-    end
-
-    should "prefer an env var for the label but fall back to the name option" do
-      current_env_process_label = ENV['QS_PROCESS_LABEL']
-
-      ENV['QS_PROCESS_LABEL'] = Factory.string
-      config = Configuration.new(:name => Factory.string)
-      assert_equal ENV['QS_PROCESS_LABEL'], config.process_label
-
-      ENV['QS_PROCESS_LABEL'] = ''
-      config = Configuration.new(:name => Factory.string)
-      assert_equal config.name, config.process_label
-
-      ENV.delete('QS_PROCESS_LABEL')
-      config = Configuration.new(:name => Factory.string)
-      assert_equal config.name, config.process_label
-
-      ENV['QS_PROCESS_LABEL'] = current_env_process_label
     end
 
     should "not be valid by default" do
@@ -670,9 +643,8 @@ module Qs::Daemon
     should "include some attrs (not just the options) in its hash" do
       config_hash = subject.to_hash
 
-      assert_equal subject.process_label, config_hash[:process_label]
-      assert_equal subject.error_procs,   config_hash[:error_procs]
-      assert_equal subject.routes,        config_hash[:routes]
+      assert_equal subject.error_procs, config_hash[:error_procs]
+      assert_equal subject.routes,      config_hash[:routes]
 
       exp = subject.queues.map(&:redis_key)
       assert_equal exp, config_hash[:queue_redis_keys]
