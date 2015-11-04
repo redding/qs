@@ -311,7 +311,6 @@ module Qs
 
       option :shutdown_timeout
 
-      attr_accessor :process_label
       attr_accessor :init_procs, :error_procs
       attr_accessor :queues
       attr_reader :worker_start_procs, :worker_shutdown_procs
@@ -319,7 +318,6 @@ module Qs
 
       def initialize(values = nil)
         super(values)
-        @process_label = !(v = ENV['QS_PROCESS_LABEL'].to_s).empty? ? v : self.name
         @init_procs, @error_procs = [], []
         @worker_start_procs, @worker_shutdown_procs = [], []
         @worker_sleep_procs, @worker_wakeup_procs   = [], []
@@ -333,7 +331,6 @@ module Qs
 
       def to_hash
         super.merge({
-          :process_label         => self.process_label,
           :error_procs           => self.error_procs,
           :worker_start_procs    => self.worker_start_procs,
           :worker_shutdown_procs => self.worker_shutdown_procs,

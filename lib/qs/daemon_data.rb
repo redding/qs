@@ -20,7 +20,7 @@ module Qs
     def initialize(args = nil)
       args ||= {}
       @name                  = args[:name]
-      @process_label         = args[:process_label]
+      @process_label         = !(v = ENV['QS_PROCESS_LABEL'].to_s).empty? ? v : args[:name]
       @pid_file              = args[:pid_file]
       @min_workers           = args[:min_workers]
       @max_workers           = args[:max_workers]

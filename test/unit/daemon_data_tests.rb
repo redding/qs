@@ -9,42 +9,33 @@ class Qs::DaemonData
   class UnitTests < Assert::Context
     desc "Qs::DaemonData"
     setup do
-      @name             = Factory.string
-      @process_label    = Factory.string
-      @pid_file         = Factory.file_path
-      @min_workers      = Factory.integer
-      @max_workers      = Factory.integer
-      @start_procs      = Factory.integer(3).times.map{ proc{} }
-      @shutdown_procs   = Factory.integer(3).times.map{ proc{} }
-      @sleep_procs      = Factory.integer(3).times.map{ proc{} }
-      @wakeup_procs     = Factory.integer(3).times.map{ proc{} }
-      @logger           = Factory.string
-      @verbose_logging  = Factory.boolean
-      @shutdown_timeout = Factory.integer
-      @error_procs      = [ proc{ Factory.string } ]
-      @queue_redis_keys = Factory.integer(3).times.map{ Factory.string }
+      @current_env_process_label = ENV['QS_PROCESS_LABEL']
+      ENV['QS_PROCESS_LABEL'] = Factory.string
 
       @routes = (0..Factory.integer(3)).map do
         Qs::Route.new(Factory.string, TestHandler.to_s).tap(&:validate!)
       end
 
-      @daemon_data = Qs::DaemonData.new({
-        :name                  => @name,
-        :process_label         => @process_label,
-        :pid_file              => @pid_file,
-        :min_workers           => @min_workers,
-        :max_workers           => @max_workers,
-        :worker_start_procs    => @start_procs,
-        :worker_shutdown_procs => @shutdown_procs,
-        :worker_sleep_procs    => @sleep_procs,
-        :worker_wakeup_procs   => @wakeup_procs,
-        :logger                => @logger,
-        :verbose_logging       => @verbose_logging,
-        :shutdown_timeout      => @shutdown_timeout,
-        :error_procs           => @error_procs,
-        :queue_redis_keys      => @queue_redis_keys,
+      @config_hash = {
+        :name                  => Factory.string,
+        :pid_file              => Factory.file_path,
+        :min_workers           => Factory.integer,
+        :max_workers           => Factory.integer,
+        :worker_start_procs    => Factory.integer(3).times.map{ proc{} },
+        :worker_shutdown_procs => Factory.integer(3).times.map{ proc{} },
+        :worker_sleep_procs    => Factory.integer(3).times.map{ proc{} },
+        :worker_wakeup_procs   => Factory.integer(3).times.map{ proc{} },
+        :logger                => Factory.string,
+        :verbose_logging       => Factory.boolean,
+        :shutdown_timeout      => Factory.integer,
+        :error_procs           => [ proc{ Factory.string } ],
+        :queue_redis_keys      => Factory.integer(3).times.map{ Factory.string },
         :routes                => @routes
-      })
+      }
+      @daemon_data = Qs::DaemonData.new(@config_hash)
+    end
+    teardown do
+      ENV['QS_PROCESS_LABEL'] = @current_env_process_label
     end
     subject{ @daemon_data }
 
@@ -60,20 +51,34 @@ class Qs::DaemonData
     should have_imeths :route_for
 
     should "know its attributes" do
-      assert_equal @name,             subject.name
-      assert_equal @process_label,    subject.process_label
-      assert_equal @pid_file,         subject.pid_file
-      assert_equal @min_workers,      subject.min_workers
-      assert_equal @max_workers,      subject.max_workers
-      assert_equal @start_procs,      subject.worker_start_procs
-      assert_equal @shutdown_procs,   subject.worker_shutdown_procs
-      assert_equal @sleep_procs,      subject.worker_sleep_procs
-      assert_equal @wakeup_procs,     subject.worker_wakeup_procs
-      assert_equal @logger,           subject.logger
-      assert_equal @verbose_logging,  subject.verbose_logging
-      assert_equal @shutdown_timeout, subject.shutdown_timeout
-      assert_equal @error_procs,      subject.error_procs
-      assert_equal @queue_redis_keys, subject.queue_redis_keys
+      h = @config_hash
+      assert_equal h[:name],                  subject.name
+      assert_equal h[:pid_file],              subject.pid_file
+      assert_equal h[:min_workers],           subject.min_workers
+      assert_equal h[:max_workers],           subject.max_workers
+      assert_equal h[:worker_start_procs],    subject.worker_start_procs
+      assert_equal h[:worker_shutdown_procs], subject.worker_shutdown_procs
+      assert_equal h[:worker_sleep_procs],    subject.worker_sleep_procs
+      assert_equal h[:worker_wakeup_procs],   subject.worker_wakeup_procs
+      assert_equal h[:logger],                subject.logger
+      assert_equal h[:verbose_logging],       subject.verbose_logging
+      assert_equal h[:shutdown_timeout],      subject.shutdown_timeout
+      assert_equal h[:error_procs],           subject.error_procs
+      assert_equal h[:queue_redis_keys],      subject.queue_redis_keys
+    end
+
+    should "use process label env var if set" do
+      ENV['QS_PROCESS_LABEL'] = Factory.string
+      daemon_data = Qs::DaemonData.new(@config_hash)
+      assert_equal ENV['QS_PROCESS_LABEL'], daemon_data.process_label
+
+      ENV['QS_PROCESS_LABEL'] = ""
+      daemon_data = Qs::DaemonData.new(@config_hash)
+      assert_equal @config_hash[:name], daemon_data.process_label
+
+      ENV.delete('QS_PROCESS_LABEL')
+      daemon_data = Qs::DaemonData.new(@config_hash)
+      assert_equal @config_hash[:name], daemon_data.process_label
     end
 
     should "build a routes lookup hash" do
