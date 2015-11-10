@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs/dispatch_job_handler'
 
-require 'qs/job_handler_test_helpers'
+require 'qs/job_handler'
 
 module Qs::DispatchJobHandler
 

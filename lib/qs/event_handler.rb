@@ -29,6 +29,22 @@ module Qs
 
     end
 
+    module TestHelpers
+
+      def self.included(klass)
+        require 'qs/test_runner'
+      end
+
+      def test_runner(handler_class, args = nil)
+        Qs::EventTestRunner.new(handler_class, args)
+      end
+
+      def test_handler(handler_class, args = nil)
+        test_runner(handler_class, args).handler
+      end
+
+    end
+
   end
 
 end
