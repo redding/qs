@@ -181,6 +181,14 @@ module Qs::MessageHandler
       assert_raises(NotImplementedError){ @handler_class.new(@runner).run! }
     end
 
+    should "know if it is equal to another message handler" do
+      handler = TestMessageHandler.new(@runner)
+      assert_equal handler, subject
+
+      handler = Class.new{ include Qs::MessageHandler }.new(Factory.string)
+      assert_not_equal handler, subject
+    end
+
   end
 
   class TestMessageHandler

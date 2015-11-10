@@ -1,7 +1,9 @@
 require 'assert'
 require 'qs/job_handler'
 
+require 'qs'
 require 'qs/message_handler'
+require 'qs/test_runner'
 
 module Qs::JobHandler
 
@@ -37,6 +39,45 @@ module Qs::JobHandler
       exp = "#<#{subject.class}:#{reference} " \
             "@job=#{@handler.public_job.inspect}>"
       assert_equal exp, subject.inspect
+    end
+
+  end
+
+  class TestHelpersTests < UnitTests
+    desc "TestHelpers"
+    setup do
+      Qs.init
+      job = Factory.job
+      @args = {
+        :message => job,
+        :params  => job.params
+      }
+
+      context_class = Class.new{ include Qs::JobHandler::TestHelpers }
+      @context = context_class.new
+    end
+    teardown do
+      Qs.reset!
+    end
+    subject{ @context }
+
+    should have_imeths :test_runner, :test_handler
+
+    should "build a test runner for a given handler class" do
+      runner = subject.test_runner(@handler_class, @args)
+
+      assert_kind_of Qs::TestRunner, runner
+      assert_equal @handler_class,   runner.handler_class
+      assert_equal @args[:message],  runner.message
+      assert_equal @args[:params],   runner.params
+    end
+
+    should "return an initialized handler instance" do
+      handler = subject.test_handler(@handler_class, @args)
+      assert_kind_of @handler_class, handler
+
+      exp = subject.test_runner(@handler_class, @args).handler
+      assert_equal exp, handler
     end
 
   end

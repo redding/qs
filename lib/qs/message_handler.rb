@@ -34,6 +34,10 @@ module Qs
         raise NotImplementedError
       end
 
+      def ==(other_handler)
+        self.class == other_handler.class
+      end
+
       private
 
       # Helpers
