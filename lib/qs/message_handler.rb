@@ -31,7 +31,6 @@ module Qs
       end
 
       def run!
-        raise NotImplementedError
       end
 
       def ==(other_handler)
