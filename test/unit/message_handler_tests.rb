@@ -153,6 +153,7 @@ module Qs::MessageHandler
     subject{ @handler }
 
     should have_imeths :init, :init!, :run, :run!
+    should have_imeths :qs_run_callback
 
     should "know its params and logger" do
       assert_equal @runner.params, subject.public_params
@@ -175,6 +176,12 @@ module Qs::MessageHandler
       assert_equal 3, subject.run_call_order
       assert_equal 4, subject.first_after_run_call_order
       assert_equal 5, subject.second_after_run_call_order
+    end
+
+    should "run its callbacks with `qs_run_callback`" do
+      subject.qs_run_callback 'before_run'
+      assert_equal 1, subject.first_before_run_call_order
+      assert_equal 2, subject.second_before_run_call_order
     end
 
     should "know if it is equal to another message handler" do

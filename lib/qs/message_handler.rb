@@ -16,21 +16,27 @@ module Qs
       end
 
       def init
-        run_callback 'before_init'
+        self.qs_run_callback 'before_init'
         self.init!
-        run_callback 'after_init'
+        self.qs_run_callback 'after_init'
       end
 
       def init!
       end
 
       def run
-        run_callback 'before_run'
+        self.qs_run_callback 'before_run'
         self.run!
-        run_callback 'after_run'
+        self.qs_run_callback 'after_run'
       end
 
       def run!
+      end
+
+      def qs_run_callback(callback)
+        (self.class.send("#{callback}_callbacks") || []).each do |callback|
+          self.instance_eval(&callback)
+        end
       end
 
       def ==(other_handler)
@@ -41,14 +47,8 @@ module Qs
 
       # Helpers
 
-      def params; @qs_runner.params; end
       def logger; @qs_runner.logger; end
-
-      def run_callback(callback)
-        (self.class.send("#{callback}_callbacks") || []).each do |callback|
-          self.instance_eval(&callback)
-        end
-      end
+      def params; @qs_runner.params; end
 
     end
 
