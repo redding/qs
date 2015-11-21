@@ -28,9 +28,9 @@ class Qs::TestRunner
     setup do
       @handler_class = TestMessageHandler
       @args = {
+        :logger  => Factory.string,
         :message => Factory.message,
         :params  => { Factory.string => Factory.string },
-        :logger  => Factory.string,
         :flag    => Factory.boolean
       }
       @original_args = @args.dup
@@ -41,10 +41,10 @@ class Qs::TestRunner
 
     should have_imeths :run
 
-    should "know its message, params and logger" do
+    should "super its standard args" do
+      assert_equal @args[:logger],  subject.logger
       assert_equal @args[:message], subject.message
       assert_equal @args[:params],  subject.params
-      assert_equal @args[:logger],  subject.logger
     end
 
     should "write extra args to its message handler" do

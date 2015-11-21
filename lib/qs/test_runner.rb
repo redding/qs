@@ -9,13 +9,13 @@ module Qs
   class TestRunner < Runner
 
     def initialize(handler_class, args = nil)
-      args = (args || {}).dup
+      a = (args || {}).dup
       super(handler_class, {
-        :message => args.delete(:message),
-        :params  => normalize_params(args.delete(:params) || {}),
-        :logger  => args.delete(:logger)
+        :logger  => a.delete(:logger),
+        :message => a.delete(:message),
+        :params  => normalize_params(a.delete(:params) || {})
       })
-      args.each{ |key, value| self.handler.send("#{key}=", value) }
+      a.each{ |key, value| self.handler.send("#{key}=", value) }
 
       self.handler.init
     end
@@ -26,8 +26,8 @@ module Qs
 
     private
 
-    # Stringify and encode/decode to ensure params are valid and are
-    # in the format they would normally be when a handler is built and run.
+    # stringify and encode/decode to ensure params are valid and are
+    # in the format they would normally be when a live handler is built and run.
     def normalize_params(params)
       params = Qs::Payload::StringifyParams.new(params)
       Qs.decode(Qs.encode(params))
@@ -39,13 +39,13 @@ module Qs
 
     def initialize(handler_class, args = nil)
       if !handler_class.include?(Qs::JobHandler)
-        raise InvalidJobHandlerError, "#{handler_class.inspect} is not a"\
-                                      " Qs::JobHandler"
+        raise InvalidJobHandlerError, "#{handler_class.inspect} is not a " \
+                                      "Qs::JobHandler"
       end
 
-      args = (args || {}).dup
-      args[:message] = args.delete(:job) if args.key?(:job)
-      super(handler_class, args)
+      a = (args || {}).dup
+      a[:message] = a.delete(:job) if a.key?(:job)
+      super(handler_class, a)
     end
 
   end
@@ -54,13 +54,13 @@ module Qs
 
     def initialize(handler_class, args = nil)
       if !handler_class.include?(Qs::EventHandler)
-        raise InvalidEventHandlerError, "#{handler_class.inspect} is not a"\
-                                      " Qs::EventHandler"
+        raise InvalidEventHandlerError, "#{handler_class.inspect} is not a " \
+                                        "Qs::EventHandler"
       end
 
-      args = (args || {}).dup
-      args[:message] = args.delete(:event) if args.key?(:event)
-      super(handler_class, args)
+      a = (args || {}).dup
+      a[:message] = a.delete(:event) if a.key?(:event)
+      super(handler_class, a)
     end
 
   end

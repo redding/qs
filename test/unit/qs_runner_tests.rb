@@ -10,7 +10,8 @@ class Qs::QsRunner
     desc "Qs::QsRunner"
     setup do
       Qs.config.timeout = Factory.integer
-      @runner_class = Qs::QsRunner
+      @handler_class = TestMessageHandler
+      @runner_class  = Qs::QsRunner
     end
     teardown do
       Qs.reset!
@@ -27,7 +28,6 @@ class Qs::QsRunner
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @handler_class = TestMessageHandler
       @runner = @runner_class.new(@handler_class)
     end
     subject{ @runner }
