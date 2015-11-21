@@ -15,10 +15,10 @@ module Qs
 
     def run
       OptionalTimeout.new(self.timeout) do
-        run_callbacks self.handler_class.before_callbacks
+        self.handler.qs_run_callback 'before'
         self.handler.init
         self.handler.run
-        run_callbacks self.handler_class.after_callbacks
+        self.handler.qs_run_callback 'after'
       end
     rescue TimeoutError => exception
       error = TimeoutError.new "#{handler_class} timed out (#{timeout}s)"
@@ -27,10 +27,6 @@ module Qs
     end
 
     private
-
-    def run_callbacks(callbacks)
-      callbacks.each{ |proc| self.handler.instance_eval(&proc) }
-    end
 
     module OptionalTimeout
       def self.new(timeout, &block)
