@@ -177,10 +177,6 @@ module Qs::MessageHandler
       assert_equal 5, subject.second_after_run_call_order
     end
 
-    should "raise a not implemented error when `run!` by default" do
-      assert_raises(NotImplementedError){ @handler_class.new(@runner).run! }
-    end
-
     should "know if it is equal to another message handler" do
       handler = TestMessageHandler.new(@runner)
       assert_equal handler, subject
