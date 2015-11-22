@@ -40,16 +40,16 @@ class Qs::Runner
 
     should "know its attrs" do
       args = {
+        :logger  => Factory.string,
         :message => Factory.string,
-        :params  => Factory.string,
-        :logger  => Factory.string
+        :params  => Factory.string
       }
 
       runner = @runner_class.new(@handler_class, args)
 
+      assert_equal args[:logger],  runner.logger
       assert_equal args[:message], runner.message
       assert_equal args[:params],  runner.params
-      assert_equal args[:logger],  runner.logger
     end
 
     should "not implement its run method" do

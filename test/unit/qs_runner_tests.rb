@@ -66,17 +66,17 @@ class Qs::QsRunner
       assert_equal [@runner.timeout], @timeout_called_with
     end
 
-    should "run the handlers before callbacks" do
+    should "run the handler's before callbacks" do
       assert_equal 1, @handler.first_before_call_order
       assert_equal 2, @handler.second_before_call_order
     end
 
-    should "call the handlers init and run methods" do
+    should "call the handler's init and run methods" do
       assert_equal 3, @handler.init_call_order
       assert_equal 4, @handler.run_call_order
     end
 
-    should "run the handlers after callbacks" do
+    should "run the handler's after callbacks" do
       assert_equal 5, @handler.first_after_call_order
       assert_equal 6, @handler.second_after_call_order
     end
@@ -157,10 +157,8 @@ class Qs::QsRunner
 
     private
 
-    def next_call_order
-      @order ||= 0
-      @order += 1
-    end
+    def next_call_order; @order ||= 0; @order += 1; end
+
   end
 
 end

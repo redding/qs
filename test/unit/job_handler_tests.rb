@@ -8,9 +8,15 @@ require 'qs/test_runner'
 module Qs::JobHandler
 
   class UnitTests < Assert::Context
+    include Qs::JobHandler::TestHelpers
+
     desc "Qs::JobHandler"
     setup do
+      Qs.init
       @handler_class = Class.new{ include Qs::JobHandler }
+    end
+    teardown do
+      Qs.reset!
     end
     subject{ @handler_class }
 
@@ -23,22 +29,16 @@ module Qs::JobHandler
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @runner  = FakeRunner.new
-      @handler = TestJobHandler.new(@runner)
+      @job     = Factory.job
+      @runner  = test_runner(TestJobHandler, :message => @job)
+      @handler = @runner.handler
     end
     subject{ @handler }
 
-    should "know its job, job name and job created at" do
-      assert_equal @runner.message,               subject.public_job
-      assert_equal subject.public_job.name,       subject.public_job_name
-      assert_equal subject.public_job.created_at, subject.public_job_created_at
-    end
-
-    should "have a custom inspect" do
-      reference = '0x0%x' % (subject.object_id << 1)
-      exp = "#<#{subject.class}:#{reference} " \
-            "@job=#{@handler.public_job.inspect}>"
-      assert_equal exp, subject.inspect
+    should "have private helpers for accessing job attrs" do
+      assert_equal @job,            subject.instance_eval{ job }
+      assert_equal @job.name,       subject.instance_eval{ job_name }
+      assert_equal @job.created_at, subject.instance_eval{ job_created_at }
     end
 
   end
@@ -85,17 +85,6 @@ module Qs::JobHandler
   class TestJobHandler
     include Qs::JobHandler
 
-    def public_job;            job;            end
-    def public_job_name;       job_name;       end
-    def public_job_created_at; job_created_at; end
-  end
-
-  class FakeRunner
-    attr_accessor :message
-
-    def initialize
-      @message = Factory.job
-    end
   end
 
 end

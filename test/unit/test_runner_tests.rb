@@ -28,10 +28,10 @@ class Qs::TestRunner
     setup do
       @handler_class = TestMessageHandler
       @args = {
-        :logger  => Factory.string,
-        :message => Factory.message,
-        :params  => { Factory.string => Factory.string },
-        :flag    => Factory.boolean
+        :logger       => Factory.string,
+        :message      => Factory.message,
+        :params       => { Factory.string => Factory.string },
+        :custom_value => Factory.integer
       }
       @original_args = @args.dup
       @runner  = @runner_class.new(@handler_class, @args)
@@ -41,33 +41,33 @@ class Qs::TestRunner
 
     should have_imeths :run
 
-    should "super its standard args" do
+    should "know its standard args" do
       assert_equal @args[:logger],  subject.logger
       assert_equal @args[:message], subject.message
       assert_equal @args[:params],  subject.params
     end
 
-    should "write extra args to its message handler" do
-      assert_equal @args[:flag], @handler.flag
+    should "write any non-standard args to its handler" do
+      assert_equal @args[:custom_value], @handler.custom_value
     end
 
     should "not alter the args passed to it" do
       assert_equal @original_args, @args
     end
 
-    should "not call its message handler's before callbacks" do
+    should "not call its handler's before callbacks" do
       assert_nil @handler.before_called
     end
 
-    should "call its message handler's init" do
+    should "call its handler's init" do
       assert_true @handler.init_called
     end
 
-    should "not run its message handler" do
+    should "not call its handler's run" do
       assert_nil @handler.run_called
     end
 
-    should "not call its message handler's after callbacks" do
+    should "not call its handler's after callbacks" do
       assert_nil @handler.after_called
     end
 
@@ -194,7 +194,7 @@ class Qs::TestRunner
 
     attr_reader :before_called, :after_called
     attr_reader :init_called, :run_called
-    attr_accessor :flag
+    attr_accessor :custom_value
 
     before{ @before_called = true }
     after{ @after_called = true }
@@ -206,6 +206,7 @@ class Qs::TestRunner
     def run!
       @run_called = true
     end
+
   end
 
   class TestJobHandler
