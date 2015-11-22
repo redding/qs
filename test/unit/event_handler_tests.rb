@@ -8,9 +8,15 @@ require 'qs/test_runner'
 module Qs::EventHandler
 
   class UnitTests < Assert::Context
+    include Qs::EventHandler::TestHelpers
+
     desc "Qs::EventHandler"
     setup do
+      Qs.init
       @handler_class = Class.new{ include Qs::EventHandler }
+    end
+    teardown do
+      Qs.reset!
     end
     subject{ @handler_class }
 
@@ -23,23 +29,17 @@ module Qs::EventHandler
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @runner  = FakeRunner.new
-      @handler = TestEventHandler.new(@runner)
+      @event   = Factory.event
+      @runner  = test_runner(TestEventHandler, :message => @event)
+      @handler = @runner.handler
     end
     subject{ @handler }
 
-    should "know its event, channel, name and published at" do
-      assert_equal @runner.message,                   subject.public_event
-      assert_equal subject.public_event.channel,      subject.public_event_channel
-      assert_equal subject.public_event.name,         subject.public_event_name
-      assert_equal subject.public_event.published_at, subject.public_event_published_at
-    end
-
-    should "have a custom inspect" do
-      reference = '0x0%x' % (subject.object_id << 1)
-      expected = "#<#{subject.class}:#{reference} " \
-                 "@event=#{@handler.public_event.inspect}>"
-      assert_equal expected, subject.inspect
+    should "have private helpers for accessing event attrs" do
+      assert_equal @event,              subject.instance_eval{ event }
+      assert_equal @event.channel,      subject.instance_eval{ event_channel }
+      assert_equal @event.name,         subject.instance_eval{ event_name }
+      assert_equal @event.published_at, subject.instance_eval{ event_published_at }
     end
 
   end
@@ -86,18 +86,6 @@ module Qs::EventHandler
   class TestEventHandler
     include Qs::EventHandler
 
-    def public_event;              event;              end
-    def public_event_channel;      event_channel;      end
-    def public_event_name;         event_name;         end
-    def public_event_published_at; event_published_at; end
-  end
-
-  class FakeRunner
-    attr_accessor :message
-
-    def initialize
-      @message = Factory.event
-    end
   end
 
 end

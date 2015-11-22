@@ -15,7 +15,7 @@ module Qs
         @qs_runner = runner
       end
 
-      def init
+      def qs_init
         self.qs_run_callback 'before_init'
         self.init!
         self.qs_run_callback 'after_init'
@@ -24,7 +24,7 @@ module Qs
       def init!
       end
 
-      def run
+      def qs_run
         self.qs_run_callback 'before_run'
         self.run!
         self.qs_run_callback 'after_run'

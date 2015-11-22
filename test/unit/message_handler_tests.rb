@@ -1,12 +1,20 @@
 require 'assert'
 require 'qs/message_handler'
 
+require 'test/support/message_handler'
+
 module Qs::MessageHandler
 
   class UnitTests < Assert::Context
+    include Qs::MessageHandler::TestHelpers
+
     desc "Qs::MessageHandler"
     setup do
+      Qs.init
       @handler_class = Class.new{ include Qs::MessageHandler }
+    end
+    teardown do
+      Qs.reset!
     end
     subject{ @handler_class }
 
@@ -147,21 +155,20 @@ module Qs::MessageHandler
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @runner  = FakeRunner.new
-      @handler = TestMessageHandler.new(@runner)
+      @runner  = test_runner(TestMessageHandler)
+      @handler = @runner.handler
     end
     subject{ @handler }
 
-    should have_imeths :init, :init!, :run, :run!
+    should have_imeths :qs_init, :init!, :qs_run, :run!
     should have_imeths :qs_run_callback
 
     should "know its params and logger" do
-      assert_equal @runner.params, subject.public_params
       assert_equal @runner.logger, subject.public_logger
+      assert_equal @runner.params, subject.public_params
     end
 
-    should "call `init!` and its before/after init callbacks using `init`" do
-      subject.init
+    should "have called `init!` and its before/after init callbacks" do
       assert_equal 1, subject.first_before_init_call_order
       assert_equal 2, subject.second_before_init_call_order
       assert_equal 3, subject.init_call_order
@@ -169,19 +176,18 @@ module Qs::MessageHandler
       assert_equal 5, subject.second_after_init_call_order
     end
 
-    should "call `run!` and its before/after run callbacks using `run`" do
-      subject.run
-      assert_equal 1, subject.first_before_run_call_order
-      assert_equal 2, subject.second_before_run_call_order
-      assert_equal 3, subject.run_call_order
-      assert_equal 4, subject.first_after_run_call_order
-      assert_equal 5, subject.second_after_run_call_order
+    should "not have called `run!` and its before/after run callbacks" do
+      assert_nil subject.first_before_run_call_order
+      assert_nil subject.second_before_run_call_order
+      assert_nil subject.run_call_order
+      assert_nil subject.first_after_run_call_order
+      assert_nil subject.second_after_run_call_order
     end
 
     should "run its callbacks with `qs_run_callback`" do
       subject.qs_run_callback 'before_run'
-      assert_equal 1, subject.first_before_run_call_order
-      assert_equal 2, subject.second_before_run_call_order
+      assert_equal 6, subject.first_before_run_call_order
+      assert_equal 7, subject.second_before_run_call_order
     end
 
     should "know if it is equal to another message handler" do
@@ -190,6 +196,45 @@ module Qs::MessageHandler
 
       handler = Class.new{ include Qs::MessageHandler }.new(Factory.string)
       assert_not_equal handler, subject
+    end
+
+  end
+
+  class RunTests < InitTests
+    desc "and run"
+    setup do
+      @handler.qs_run
+    end
+
+    should "call `run!` and it's callbacks" do
+      assert_equal 6,  subject.first_before_run_call_order
+      assert_equal 7,  subject.second_before_run_call_order
+      assert_equal 8,  subject.run_call_order
+      assert_equal 9,  subject.first_after_run_call_order
+      assert_equal 10, subject.second_after_run_call_order
+    end
+
+  end
+
+  class PrivateHelpersTests < InitTests
+    setup do
+      @something = Factory.string
+    end
+
+    should "call to the runner for its logger" do
+      stub_runner_with_something_for(:logger)
+      assert_equal @runner.logger, subject.instance_eval{ logger }
+    end
+
+    should "call to the runner for its params" do
+      stub_runner_with_something_for(:params)
+      assert_equal @runner.params, subject.instance_eval{ params }
+    end
+
+    private
+
+    def stub_runner_with_something_for(meth)
+      Assert.stub(@runner, meth){ @something }
     end
 
   end
@@ -231,15 +276,6 @@ module Qs::MessageHandler
     def next_call_order
       @order ||= 0
       @order += 1
-    end
-  end
-
-  class FakeRunner
-    attr_accessor :params, :logger
-
-    def initialize
-      @params = Factory.string
-      @logger = Factory.string
     end
   end
 

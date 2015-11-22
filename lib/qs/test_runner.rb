@@ -17,11 +17,11 @@ module Qs
       })
       a.each{ |key, value| self.handler.send("#{key}=", value) }
 
-      self.handler.init
+      self.handler.qs_init
     end
 
     def run
-      self.handler.run
+      self.handler.qs_run
     end
 
     private

@@ -16,8 +16,8 @@ module Qs
     def run
       OptionalTimeout.new(self.timeout) do
         self.handler.qs_run_callback 'before'
-        self.handler.init
-        self.handler.run
+        self.handler.qs_init
+        self.handler.qs_run
         self.handler.qs_run_callback 'after'
       end
     rescue TimeoutError => exception
