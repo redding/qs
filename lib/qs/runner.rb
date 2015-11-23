@@ -8,13 +8,13 @@ module Qs
     attr_reader :logger, :message, :params
 
     def initialize(handler_class, args = nil)
-      @handler_class = handler_class
-      @handler = @handler_class.new(self)
-
       args ||= {}
       @logger  = args[:logger] || Qs::NullLogger.new
       @message = args[:message]
       @params  = args[:params] || {}
+
+      @handler_class = handler_class
+      @handler = @handler_class.new(self)
     end
 
     def run
