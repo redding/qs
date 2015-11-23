@@ -53,12 +53,12 @@ class BenchRunner
 
     size = @results.values.map(&:size).max
     output "\n", false
-    output "Enqueueing #{@number_of_jobs} Jobs Time: #{@results[:enqueueing_jobs].rjust(size)}"
-    output "Running #{@number_of_jobs} Jobs Time:    #{@results[:running_jobs].rjust(size)}"
+    output "Enqueueing #{@number_of_jobs} Jobs Time: #{@results[:enqueueing_jobs].rjust(size)}s"
+    output "Running #{@number_of_jobs} Jobs Time:    #{@results[:running_jobs].rjust(size)}s"
 
     output "\n", false
-    output "Publishing #{@number_of_events} Events Time: #{@results[:publishing_events].rjust(size)}"
-    output "Running #{@number_of_events} Events Time:    #{@results[:running_events].rjust(size)}"
+    output "Publishing #{@number_of_events} Events Time: #{@results[:publishing_events].rjust(size)}s"
+    output "Running #{@number_of_events} Events Time:    #{@results[:running_events].rjust(size)}s"
 
     output "\n"
     output "Done running benchmark report"
