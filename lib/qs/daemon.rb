@@ -30,14 +30,14 @@ module Qs
       attr_reader :daemon_data, :logger
       attr_reader :signals_redis_key, :queue_redis_keys
 
-      # * Set the size of the client to the max workers + 1. This ensures we
-      #   have 1 connection for fetching work from redis and at least 1
-      #   connection for each worker to requeue its message when hard-shutdown.
+      # set the size of the client to the num workers + 1, this ensures we have
+      # 1 connection for fetching work from redis and at least 1 connection for
+      # each worker to requeue its message when hard-shutdown
       def initialize
         self.class.configuration.validate!
         Qs.init
         @daemon_data = DaemonData.new(self.class.configuration.to_hash)
-        @logger = @daemon_data.logger
+        @logger      = @daemon_data.logger
 
         @client = QsClient.new(Qs.redis_config.merge({
           :timeout => 1,
@@ -52,6 +52,7 @@ module Qs
 
         @worker_pool = DatWorkerPool.new(self.daemon_data.worker_class, {
           :num_workers   => self.daemon_data.num_workers,
+          :logger        => self.daemon_data.dwp_logger,
           :worker_params => self.daemon_data.worker_params.merge({
             :qs_daemon_data      => self.daemon_data,
             :qs_client           => @client,
@@ -83,9 +84,9 @@ module Qs
         !!(@thread && @thread.alive?)
       end
 
-      # * Ping redis to check that it can communicate with redis before running,
-      #   this is friendlier than starting and continously erroring because it
-      #   can't dequeue.
+      # ping to check that it can communicate with redis before running, this is
+      # friendlier than starting and continously erroring because it can't
+      # dequeue
       def start
         @client.ping
         @signal.set :start
@@ -115,26 +116,24 @@ module Qs
         @signal.set :stop
         log "Error occurred while running the daemon, exiting", :error
         log "#{exception.class}: #{exception.message}", :error
-        log exception.backtrace.join("\n"), :error
+        (exception.backtrace || []).each{ |l| log(l, :error) }
       ensure
         teardown
       end
 
+      # clear any signals that are already on the signals list in redis
       def setup
-        log "Starting work loop", :debug
-        # clear any signals that are already on the signals list
         @client.clear(self.signals_redis_key)
         @worker_pool.start
       end
 
-      # * Shuffle the queue redis keys to avoid queue starvation. Redis will
-      #   pull messages off queues in the order they are passed to the command,
-      #   by shuffling we ensure they are randomly ordered so every queue should
-      #   get a chance.
-      # * Use 0 for the brpop timeout which means block indefinitely.
-      # * Rescue runtime errors so the daemon thread doesn't fail if redis is
-      #   temporarily down. Sleep for a second to keep the thread from thrashing
-      #   by repeatedly erroring if redis is down.
+      # shuffle the queue redis keys to avoid queue starvation, redis will pull
+      # messages off queues in the order they are passed to the command, by
+      # shuffling we ensure they are randomly ordered so every queue should get
+      # a chance; use 0 for the brpop timeout which means block indefinitely;
+      # rescue runtime errors so the daemon thread doesn't fail if redis is
+      # temporarily down, sleep for a second to keep the thread from thrashing
+      # by repeatedly erroring if redis is down
       def fetch_messages
         if !@worker_pool.worker_available? && @signal.start?
           @worker_available.wait
@@ -148,15 +147,14 @@ module Qs
             @worker_pool.push(QueueItem.new(redis_key, encoded_payload))
           end
         rescue RuntimeError => exception
-          log "Error dequeueing #{exception.message.inspect}", :error
-          log exception.backtrace.join("\n"), :error
+          log "Error occurred while dequeueing", :error
+          log "#{exception.class}: #{exception.message}", :error
+          (exception.backtrace || []).each{ |l| log(l, :error) }
           sleep 1
         end
       end
 
       def teardown
-        log "Stopping work loop", :debug
-
         timeout = @signal.halt? ? 0 : self.daemon_data.shutdown_timeout
         @worker_pool.shutdown(timeout)
 
@@ -164,8 +162,6 @@ module Qs
         @worker_pool.work_items.each do |qi|
           @client.prepend(qi.queue_redis_key, qi.encoded_payload)
         end
-
-        log "Stopped work loop", :debug
       ensure
         @thread = nil
       end
