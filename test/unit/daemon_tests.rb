@@ -227,6 +227,7 @@ module Qs::Daemon
 
       assert_not_nil @wp_spy
       assert_equal data.worker_class, @wp_spy.worker_class
+      assert_equal data.dwp_logger,   @wp_spy.logger
       assert_equal data.num_workers,  @wp_spy.num_workers
       exp = data.worker_params.merge({
         :qs_daemon_data      => data,
