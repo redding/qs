@@ -2,6 +2,7 @@ require 'assert'
 require 'qs/worker'
 
 require 'dat-worker-pool/worker'
+require 'much-plugin'
 require 'qs/daemon'
 require 'qs/daemon_data'
 require 'qs/logger'
@@ -18,6 +19,10 @@ module Qs::Worker
       @worker_class = Class.new{ include Qs::Worker }
     end
     subject{ @worker_class }
+
+    should "use much-plugin" do
+      assert_includes MuchPlugin, Qs::Worker
+    end
 
     should "be a dat-worker-pool worker" do
       assert_includes DatWorkerPool::Worker, subject
