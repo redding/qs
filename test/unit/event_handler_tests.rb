@@ -1,6 +1,7 @@
 require 'assert'
 require 'qs/event_handler'
 
+require 'much-plugin'
 require 'qs'
 require 'qs/message_handler'
 require 'qs/test_runner'
@@ -19,6 +20,10 @@ module Qs::EventHandler
       Qs.reset!
     end
     subject{ @handler_class }
+
+    should "use much-plugin" do
+      assert_includes MuchPlugin, Qs::Worker
+    end
 
     should "be a message handler" do
       assert_includes Qs::MessageHandler, subject
