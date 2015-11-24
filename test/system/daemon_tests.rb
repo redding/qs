@@ -144,27 +144,6 @@ module Qs::Daemon
 
   end
 
-  class NoWorkersAvailableTests < SystemTests
-    desc "when no workers are available"
-    setup do
-      AppDaemon.workers 0 # no workers available, don't do this
-      setup_app_and_dispatcher_daemon
-    end
-
-    should "shutdown when stopped" do
-      @app_daemon.stop
-      @app_thread.join 2 # give it time to shutdown, should be faster
-      assert_false @app_thread.alive?
-    end
-
-    should "shutdown when halted" do
-      @app_daemon.halt
-      @app_thread.join 2 # give it time to shutdown, should be faster
-      assert_false @app_thread.alive?
-    end
-
-  end
-
   class ShutdownWithoutTimeoutTests < SystemTests
     desc "without a shutdown timeout"
     setup do
