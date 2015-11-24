@@ -7,8 +7,8 @@ require 'qs'
 require 'qs/client'
 require 'qs/daemon_data'
 require 'qs/logger'
-require 'qs/payload_handler'
 require 'qs/queue_item'
+require 'qs/worker'
 
 module Qs
 
@@ -41,18 +41,27 @@ module Qs
 
         @client = QsClient.new(Qs.redis_config.merge({
           :timeout => 1,
-          :size    => self.daemon_data.max_workers + 1
+          :size    => self.daemon_data.num_workers + 1
         }))
         @queue_redis_keys = self.daemon_data.queue_redis_keys
-
-        @work_loop_thread = nil
-        @worker_pool      = nil
 
         @signals_redis_key = "signals:#{@daemon_data.name}-" \
                              "#{Socket.gethostname}-#{::Process.pid}"
 
         @worker_available = WorkerAvailable.new
-        @signal           = Signal.new(:stop)
+
+        @worker_pool = DatWorkerPool.new(self.daemon_data.worker_class, {
+          :num_workers   => self.daemon_data.num_workers,
+          :worker_params => self.daemon_data.worker_params.merge({
+            :qs_daemon_data      => self.daemon_data,
+            :qs_client           => @client,
+            :qs_worker_available => @worker_available,
+            :qs_logger           => @logger
+          })
+        })
+
+        @thread = nil
+        @signal = Signal.new(:stop)
       rescue InvalidError => exception
         exception.set_backtrace(caller)
         raise exception
@@ -71,7 +80,7 @@ module Qs
       end
 
       def running?
-        !!(@work_loop_thread && @work_loop_thread.alive?)
+        !!(@thread && @thread.alive?)
       end
 
       # * Ping redis to check that it can communicate with redis before running,
@@ -80,71 +89,42 @@ module Qs
       def start
         @client.ping
         @signal.set :start
-        @work_loop_thread ||= Thread.new{ work_loop }
+        @thread ||= Thread.new{ work_loop }
       end
 
       def stop(wait = false)
         return unless self.running?
         @signal.set :stop
-        wakeup_work_loop_thread
+        wakeup_thread
         wait_for_shutdown if wait
       end
 
       def halt(wait = false)
         return unless self.running?
         @signal.set :halt
-        wakeup_work_loop_thread
+        wakeup_thread
         wait_for_shutdown if wait
       end
 
       private
 
-      def process(queue_item)
-        Qs::PayloadHandler.new(self.daemon_data, queue_item).run
-      end
-
       def work_loop
-        log "Starting work loop", :debug
-        setup_redis
-        @worker_pool = build_worker_pool
-        process_inputs while @signal.start?
-        log "Stopping work loop", :debug
+        setup
+        fetch_messages while @signal.start?
       rescue StandardError => exception
         @signal.set :stop
         log "Error occurred while running the daemon, exiting", :error
         log "#{exception.class}: #{exception.message}", :error
         log exception.backtrace.join("\n"), :error
       ensure
-        shutdown_worker_pool
-        @work_loop_thread = nil
-        log "Stopped work loop", :debug
+        teardown
       end
 
-      def setup_redis
-        # clear any signals that are already on the signals redis list
+      def setup
+        log "Starting work loop", :debug
+        # clear any signals that are already on the signals list
         @client.clear(self.signals_redis_key)
-      end
-
-      def build_worker_pool
-        wp = DatWorkerPool.new(
-          self.daemon_data.min_workers,
-          self.daemon_data.max_workers
-        ){ |queue_item| process(queue_item) }
-
-        # add internal callbacks
-        wp.on_worker_error do |worker, exception, queue_item|
-          handle_worker_exception(exception, queue_item)
-        end
-        wp.on_worker_sleep{ @worker_available.signal }
-
-        # add any configured callbacks
-        self.daemon_data.worker_start_procs.each{ |p| wp.on_worker_start(&p) }
-        self.daemon_data.worker_shutdown_procs.each{ |p|  wp.on_worker_shutdown(&p) }
-        self.daemon_data.worker_sleep_procs.each{ |p| wp.on_worker_sleep(&p) }
-        self.daemon_data.worker_wakeup_procs.each{ |p| wp.on_worker_wakeup(&p) }
-
-        wp.start
-        wp
+        @worker_pool.start
       end
 
       # * Shuffle the queue redis keys to avoid queue starvation. Redis will
@@ -155,15 +135,17 @@ module Qs
       # * Rescue runtime errors so the daemon thread doesn't fail if redis is
       #   temporarily down. Sleep for a second to keep the thread from thrashing
       #   by repeatedly erroring if redis is down.
-      def process_inputs
-        wait_for_available_worker
+      def fetch_messages
+        if !@worker_pool.worker_available? && @signal.start?
+          @worker_available.wait
+        end
         return unless @worker_pool.worker_available? && @signal.start?
 
         begin
           args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
           redis_key, encoded_payload = @client.block_dequeue(*args)
           if redis_key != @signals_redis_key
-            @worker_pool.add_work(QueueItem.new(redis_key, encoded_payload))
+            @worker_pool.push(QueueItem.new(redis_key, encoded_payload))
           end
         rescue RuntimeError => exception
           log "Error dequeueing #{exception.message.inspect}", :error
@@ -172,54 +154,29 @@ module Qs
         end
       end
 
-      def wait_for_available_worker
-        if !@worker_pool.worker_available? && @signal.start?
-          @worker_available.wait
-        end
-      end
+      def teardown
+        log "Stopping work loop", :debug
 
-      def shutdown_worker_pool
-        return unless @worker_pool
-        timeout = @signal.stop? ? self.daemon_data.shutdown_timeout : 0
-        if timeout
-          log "Shutting down, waiting up to #{timeout} seconds for work to finish"
-        else
-          log "Shutting down, waiting for work to finish"
-        end
+        timeout = @signal.halt? ? 0 : self.daemon_data.shutdown_timeout
         @worker_pool.shutdown(timeout)
+
         log "Requeueing #{@worker_pool.work_items.size} message(s)"
-        @worker_pool.work_items.each do |ri|
-          @client.prepend(ri.queue_redis_key, ri.encoded_payload)
+        @worker_pool.work_items.each do |qi|
+          @client.prepend(qi.queue_redis_key, qi.encoded_payload)
         end
+
+        log "Stopped work loop", :debug
+      ensure
+        @thread = nil
       end
 
-      def wait_for_shutdown
-        @work_loop_thread.join if @work_loop_thread
-      end
-
-      def wakeup_work_loop_thread
+      def wakeup_thread
         @client.append(self.signals_redis_key, SIGNAL)
         @worker_available.signal
       end
 
-      # * This only catches errors that happen outside of running the payload
-      #   handler. The only known use-case for this is dat worker pools
-      #   hard-shutdown errors.
-      # * If there isn't a queue item (this can happen when an idle worker is
-      #   being forced to exit) then we don't need to do anything.
-      # * If we never started processing the queue item, its safe to requeue it.
-      #   Otherwise it happened while processing so the payload handler caught
-      #   it or it happened after the payload handler which we don't care about.
-      def handle_worker_exception(exception, queue_item)
-        return if queue_item.nil?
-        if !queue_item.started
-          log "Worker error, requeueing message because it hasn't started", :error
-          @client.prepend(queue_item.queue_redis_key, queue_item.encoded_payload)
-        else
-          log "Worker error after message was processed, ignoring", :error
-        end
-        log "#{exception.class}: #{exception.message}", :error
-        log (exception.backtrace || []).join("\n"), :error
+      def wait_for_shutdown
+        @thread.join if @thread
       end
 
       def log(message, level = :info)
@@ -242,34 +199,20 @@ module Qs
         self.configuration.pid_file(*args)
       end
 
-      def min_workers(*args)
-        self.configuration.min_workers(*args)
+      def worker_class(new_worker_class = nil)
+        self.configuration.worker_class = new_worker_class if new_worker_class
+        self.configuration.worker_class
       end
 
-      def max_workers(*args)
-        self.configuration.max_workers(*args)
+      def worker_params(new_worker_params = nil )
+        self.configuration.worker_params = new_worker_params if new_worker_params
+        self.configuration.worker_params
       end
 
-      def workers(*args)
-        self.min_workers(*args)
-        self.max_workers(*args)
+      def num_workers(*args)
+        self.configuration.num_workers(*args)
       end
-
-      def on_worker_start(&block)
-        self.configuration.worker_start_procs << block
-      end
-
-      def on_worker_shutdown(&block)
-        self.configuration.worker_shutdown_procs << block
-      end
-
-      def on_worker_sleep(&block)
-        self.configuration.worker_sleep_procs << block
-      end
-
-      def on_worker_wakeup(&block)
-        self.configuration.worker_wakeup_procs << block
-      end
+      alias :workers :num_workers
 
       def verbose_logging(*args)
         self.configuration.verbose_logging(*args)
@@ -303,8 +246,7 @@ module Qs
       option :name,     String,  :required => true
       option :pid_file, Pathname
 
-      option :min_workers, Integer, :default => 1
-      option :max_workers, Integer, :default => 4
+      option :num_workers, Integer, :default => 4
 
       option :verbose_logging, :default => true
       option :logger,          :default => proc{ Qs::NullLogger.new }
@@ -312,17 +254,16 @@ module Qs
       option :shutdown_timeout
 
       attr_accessor :init_procs, :error_procs
+      attr_accessor :worker_class, :worker_params
       attr_accessor :queues
-      attr_reader :worker_start_procs, :worker_shutdown_procs
-      attr_reader :worker_sleep_procs, :worker_wakeup_procs
 
       def initialize(values = nil)
         super(values)
         @init_procs, @error_procs = [], []
-        @worker_start_procs, @worker_shutdown_procs = [], []
-        @worker_sleep_procs, @worker_wakeup_procs   = [], []
+        @worker_class  = DefaultWorker
+        @worker_params = nil
         @queues = []
-        @valid  = nil
+        @valid = nil
       end
 
       def routes
@@ -331,13 +272,11 @@ module Qs
 
       def to_hash
         super.merge({
-          :error_procs           => self.error_procs,
-          :worker_start_procs    => self.worker_start_procs,
-          :worker_shutdown_procs => self.worker_shutdown_procs,
-          :worker_sleep_procs    => self.worker_sleep_procs,
-          :worker_wakeup_procs   => self.worker_wakeup_procs,
-          :routes                => self.routes,
-          :queue_redis_keys      => self.queues.map(&:redis_key)
+          :error_procs      => self.error_procs,
+          :worker_class     => self.worker_class,
+          :worker_params    => self.worker_params,
+          :routes           => self.routes,
+          :queue_redis_keys => self.queues.map(&:redis_key)
         })
       end
 
@@ -351,10 +290,15 @@ module Qs
         if self.queues.empty? || !self.required_set?
           raise InvalidError, "a name and queue must be configured"
         end
+        if !self.worker_class.kind_of?(Class) || !self.worker_class.include?(Qs::Worker)
+          raise InvalidError, "worker class must include `#{Qs::Worker}`"
+        end
         self.routes.each(&:validate!)
         @valid = true
       end
     end
+
+    DefaultWorker = Class.new{ include Qs::Worker }
 
     class WorkerAvailable
       def initialize
