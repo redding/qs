@@ -1,5 +1,8 @@
 require 'dat-worker-pool/worker'
 require 'much-plugin'
+require 'qs/client'
+require 'qs/daemon'
+require 'qs/daemon_data'
 require 'qs/payload_handler'
 
 module Qs
@@ -51,6 +54,31 @@ module Qs
 
       def qs_log(message, level = :info)
         params[:qs_logger].send(level, "[Qs-#{number}] #{message}")
+      end
+
+    end
+
+    module TestHelpers
+      include MuchPlugin
+
+      plugin_included do
+        include DatWorkerPool::Worker::TestHelpers
+        include InstanceMethods
+      end
+
+      module InstanceMethods
+
+        def test_runner(worker_class, options = nil)
+          options ||= {}
+          options[:params] = {
+            :qs_daemon_data      => Qs::DaemonData.new,
+            :qs_client           => Qs::TestClient.new({}),
+            :qs_worker_available => Qs::Daemon::WorkerAvailable.new,
+            :qs_logger           => Qs::NullLogger.new
+          }.merge(options[:params] || {})
+          super(worker_class, options)
+        end
+
       end
 
     end
