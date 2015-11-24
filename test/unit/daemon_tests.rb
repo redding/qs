@@ -2,6 +2,7 @@ require 'assert'
 require 'qs/daemon'
 
 require 'dat-worker-pool/worker_pool_spy'
+require 'much-plugin'
 require 'ns-options/assert_macros'
 require 'thread'
 require 'qs/client'
@@ -25,6 +26,10 @@ module Qs::Daemon
     should have_imeths :verbose_logging, :logger
     should have_imeths :shutdown_timeout
     should have_imeths :init, :error, :queue
+
+    should "use much-plugin" do
+      assert_includes MuchPlugin, Qs::Daemon
+    end
 
     should "know its configuration" do
       config = subject.configuration
@@ -143,7 +148,7 @@ module Qs::Daemon
       @worker_available = WorkerAvailable.new
       Assert.stub(WorkerAvailable, :new){ @worker_available }
 
-      @wp_spy             = nil
+      @wp_spy              = nil
       @wp_worker_available = true
       Assert.stub(DatWorkerPool, :new) do |*args|
         @wp_spy = DatWorkerPool::WorkerPoolSpy.new(*args)

@@ -1,6 +1,7 @@
 require 'assert'
 require 'qs/message_handler'
 
+require 'much-plugin'
 require 'test/support/message_handler'
 
 module Qs::MessageHandler
@@ -28,6 +29,10 @@ module Qs::MessageHandler
     should have_imeths :prepend_before, :prepend_after
     should have_imeths :prepend_before_init, :prepend_after_init
     should have_imeths :prepend_before_run,  :prepend_after_run
+
+    should "use much-plugin" do
+      assert_includes MuchPlugin, Qs::Worker
+    end
 
     should "allow reading/writing its timeout" do
       assert_nil subject.timeout

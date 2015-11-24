@@ -1,26 +1,20 @@
 require 'dat-worker-pool/worker'
+require 'much-plugin'
 require 'qs/payload_handler'
 
 module Qs
 
   module Worker
+    include MuchPlugin
 
-    IVAR_NAME = "@qs_worker_mixin_included_already".freeze
+    plugin_included do
+      include DatWorkerPool::Worker
+      include InstanceMethods
 
-    def self.included(klass)
-      return if klass.instance_variable_get(IVAR_NAME)
+      on_available{ params[:qs_worker_available].signal }
 
-      klass.class_eval do
-        include DatWorkerPool::Worker
-        include InstanceMethods
+      on_error{ |e, wi| qs_handle_exception(e, wi) }
 
-        on_available{ params[:qs_worker_available].signal }
-
-        on_error{ |e, wi| qs_handle_exception(e, wi) }
-
-      end
-
-      klass.instance_variable_set(IVAR_NAME, true)
     end
 
     module InstanceMethods
