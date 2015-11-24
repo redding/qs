@@ -1,4 +1,5 @@
 require 'dat-worker-pool'
+require 'much-plugin'
 require 'ns-options'
 require 'pathname'
 require 'system_timer'
@@ -13,16 +14,15 @@ require 'qs/worker'
 module Qs
 
   module Daemon
+    include MuchPlugin
 
     InvalidError = Class.new(ArgumentError)
 
     SIGNAL = '.'.freeze
 
-    def self.included(klass)
-      klass.class_eval do
-        extend ClassMethods
-        include InstanceMethods
-      end
+    plugin_included do
+      extend ClassMethods
+      include InstanceMethods
     end
 
     module InstanceMethods
