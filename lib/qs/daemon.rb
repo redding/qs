@@ -62,7 +62,7 @@ module Qs
         })
 
         @thread = nil
-        @signal = Signal.new(:stop)
+        @state = State.new(:stop)
       rescue InvalidError => exception
         exception.set_backtrace(caller)
         raise exception
@@ -89,20 +89,20 @@ module Qs
       # dequeue
       def start
         @client.ping
-        @signal.set :start
+        @state.set :run
         @thread ||= Thread.new{ work_loop }
       end
 
       def stop(wait = false)
         return unless self.running?
-        @signal.set :stop
+        @state.set :stop
         wakeup_thread
         wait_for_shutdown if wait
       end
 
       def halt(wait = false)
         return unless self.running?
-        @signal.set :halt
+        @state.set :halt
         wakeup_thread
         wait_for_shutdown if wait
       end
@@ -111,9 +111,9 @@ module Qs
 
       def work_loop
         setup
-        fetch_messages while @signal.start?
+        fetch_messages while @state.run?
       rescue StandardError => exception
-        @signal.set :stop
+        @state.set :stop
         log "Error occurred while running the daemon, exiting", :error
         log "#{exception.class}: #{exception.message}", :error
         (exception.backtrace || []).each{ |l| log(l, :error) }
@@ -135,10 +135,10 @@ module Qs
       # temporarily down, sleep for a second to keep the thread from thrashing
       # by repeatedly erroring if redis is down
       def fetch_messages
-        if !@worker_pool.worker_available? && @signal.start?
+        if !@worker_pool.worker_available? && @state.run?
           @worker_available.wait
         end
-        return unless @worker_pool.worker_available? && @signal.start?
+        return unless @worker_pool.worker_available? && @state.run?
 
         begin
           args = [self.signals_redis_key, self.queue_redis_keys.shuffle, 0].flatten
@@ -155,7 +155,7 @@ module Qs
       end
 
       def teardown
-        timeout = @signal.halt? ? 0 : self.daemon_data.shutdown_timeout
+        timeout = @state.halt? ? 0 : self.daemon_data.shutdown_timeout
         @worker_pool.shutdown(timeout)
 
         log "Requeueing #{@worker_pool.work_items.size} message(s)"
@@ -298,40 +298,18 @@ module Qs
 
     class WorkerAvailable
       def initialize
-        @mutex = Mutex.new
-        @cv    = ConditionVariable.new
+        @mutex    = Mutex.new
+        @cond_var = ConditionVariable.new
       end
 
-      def wait
-        @mutex.synchronize{ @cv.wait(@mutex) }
-      end
-
-      def signal
-        @mutex.synchronize{ @cv.signal }
-      end
+      def wait;   @mutex.synchronize{ @cond_var.wait(@mutex) }; end
+      def signal; @mutex.synchronize{ @cond_var.signal };       end
     end
 
-    class Signal
-      def initialize(value)
-        @value = value
-        @mutex = Mutex.new
-      end
-
-      def set(value)
-        @mutex.synchronize{ @value = value }
-      end
-
-      def start?
-        @mutex.synchronize{ @value == :start }
-      end
-
-      def stop?
-        @mutex.synchronize{ @value == :stop }
-      end
-
-      def halt?
-        @mutex.synchronize{ @value == :halt }
-      end
+    class State < DatWorkerPool::LockedObject
+      def run?;  self.value == :run;  end
+      def stop?; self.value == :stop; end
+      def halt?; self.value == :halt; end
     end
 
   end
