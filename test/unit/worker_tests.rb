@@ -96,6 +96,45 @@ module Qs::Worker
 
   end
 
+  class TestHelpersTests < UnitTests
+    desc "TestHelpers"
+    setup do
+      @context_class = Class.new{ include TestHelpers }
+      @context = @context_class.new
+    end
+    subject{ @context }
+
+    should have_imeths :test_runner
+
+    should "mixin dat-worker-pool's worker test helpers" do
+      assert_includes DatWorkerPool::Worker::TestHelpers, @context_class
+    end
+
+    should "super worker params needed to run a qs worker" do
+      runner = @context.test_runner(@worker_class)
+      worker_params = runner.dwp_runner.worker_params
+
+      assert_instance_of Qs::DaemonData, worker_params[:qs_daemon_data]
+      assert_instance_of Qs::TestClient, worker_params[:qs_client]
+      exp = Qs::Daemon::WorkerAvailable
+      assert_instance_of exp, worker_params[:qs_worker_available]
+      assert_instance_of Qs::NullLogger, worker_params[:qs_logger]
+    end
+
+    should "allow providing custom worker params for running a qs worker" do
+      @params = {
+        :qs_daemon_data      => Factory.string,
+        :qs_client           => Factory.string,
+        :qs_worker_available => Factory.string,
+        :qs_logger           => Factory.string
+      }
+      runner = @context.test_runner(@worker_class, :params => @params)
+
+      assert_equal @params, runner.dwp_runner.worker_params
+    end
+
+  end
+
   class PayloadHandlerSpy
     attr_reader :daemon_data, :queue_item, :run_called
 
