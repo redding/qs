@@ -625,33 +625,34 @@ module Qs::Daemon
 
   end
 
-  class SignalTests < UnitTests
-    desc "Signal"
+  class StateTests < UnitTests
+    desc "State"
     setup do
-      @signal = Signal.new(:stop)
+      @state = State.new
     end
-    subject{ @signal }
+    subject{ @state }
 
-    should have_imeths :set, :start?, :stop?, :halt?
+    should have_imeths :run?, :stop?, :halt?
 
-    should "allow setting it to start" do
-      subject.set :start
-      assert_true subject.start?
+    should "be a dat-worker-pool locked object" do
+      assert State < DatWorkerPool::LockedObject
+    end
+
+    should "know if its in the run state" do
+      assert_false subject.run?
+      subject.set :run
+      assert_true subject.run?
+    end
+
+    should "know if its in the stop state" do
       assert_false subject.stop?
-      assert_false subject.halt?
-    end
-
-    should "allow setting it to stop" do
       subject.set :stop
-      assert_false subject.start?
       assert_true subject.stop?
-      assert_false subject.halt?
     end
 
-    should "allow setting it to halt" do
+    should "know if its in the halt state" do
+      assert_false subject.halt?
       subject.set :halt
-      assert_false subject.start?
-      assert_false subject.stop?
       assert_true subject.halt?
     end
 
