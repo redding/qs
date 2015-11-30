@@ -7,33 +7,32 @@ module Qs
     # options one time here and memoize their values. This way, we don't pay the
     # NsOptions overhead when reading them while handling a message.
 
-    attr_reader :name, :process_label
-    attr_reader :pid_file
-    attr_reader :min_workers, :max_workers
-    attr_reader :worker_start_procs, :worker_shutdown_procs
-    attr_reader :worker_sleep_procs, :worker_wakeup_procs
-    attr_reader :logger, :verbose_logging
+    attr_reader :name, :process_label, :pid_file
+    attr_reader :worker_class, :worker_params, :num_workers
+    attr_reader :debug, :logger, :dwp_logger, :verbose_logging
     attr_reader :shutdown_timeout
-    attr_reader :error_procs
-    attr_reader :queue_redis_keys, :routes
+    attr_reader :error_procs, :queue_redis_keys, :routes
 
     def initialize(args = nil)
       args ||= {}
-      @name                  = args[:name]
-      @process_label         = !(v = ENV['QS_PROCESS_LABEL'].to_s).empty? ? v : args[:name]
-      @pid_file              = args[:pid_file]
-      @min_workers           = args[:min_workers]
-      @max_workers           = args[:max_workers]
-      @worker_start_procs    = args[:worker_start_procs]
-      @worker_shutdown_procs = args[:worker_shutdown_procs]
-      @worker_sleep_procs    = args[:worker_sleep_procs]
-      @worker_wakeup_procs   = args[:worker_wakeup_procs]
-      @logger                = args[:logger]
-      @verbose_logging       = !!args[:verbose_logging]
-      @shutdown_timeout      = args[:shutdown_timeout]
-      @error_procs           = args[:error_procs] || []
-      @queue_redis_keys      = args[:queue_redis_keys] || []
-      @routes                = build_routes(args[:routes] || [])
+      @name          = args[:name]
+      @process_label = !(v = ENV['QS_PROCESS_LABEL'].to_s).empty? ? v : args[:name]
+      @pid_file      = args[:pid_file]
+
+      @worker_class  = args[:worker_class]
+      @worker_params = args[:worker_params] || {}
+      @num_workers   = args[:num_workers]
+
+      @debug           = !ENV['QS_DEBUG'].to_s.empty?
+      @logger          = args[:logger]
+      @dwp_logger      = @logger if @debug
+      @verbose_logging = !!args[:verbose_logging]
+
+      @shutdown_timeout = args[:shutdown_timeout]
+
+      @error_procs      = args[:error_procs] || []
+      @queue_redis_keys = args[:queue_redis_keys] || []
+      @routes           = build_routes(args[:routes] || [])
     end
 
     def route_for(route_id)

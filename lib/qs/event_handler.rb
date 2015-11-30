@@ -1,14 +1,14 @@
+require 'much-plugin'
 require 'qs/message_handler'
 
 module Qs
 
   module EventHandler
+    include MuchPlugin
 
-    def self.included(klass)
-      klass.class_eval do
-        include Qs::MessageHandler
-        include InstanceMethods
-      end
+    plugin_included do
+      include Qs::MessageHandler
+      include InstanceMethods
     end
 
     module InstanceMethods

@@ -26,7 +26,6 @@ module Qs
       benchmark = Benchmark.measure{ run!(@daemon_data, @queue_item) }
       @queue_item.time_taken = RoundedTime.new(benchmark.real)
       log_complete(@queue_item)
-      raise_if_debugging!(@queue_item.exception)
     end
 
     private
@@ -67,10 +66,6 @@ module Qs
       log_exception(queue_item.exception)
     end
 
-    def raise_if_debugging!(exception)
-      raise exception if exception && ENV['QS_DEBUG']
-    end
-
     def log_received
       log_verbose "===== Received message ====="
     end
@@ -99,9 +94,8 @@ module Qs
     end
 
     def log_exception(exception)
-      backtrace = (exception.backtrace || []).join("\n")
-      message = "#{exception.class}: #{exception.message}\n#{backtrace}"
-      log_verbose(message, :error)
+      log_verbose("#{exception.class}: #{exception.message}", :error)
+      (exception.backtrace || []).each{ |l| log_verbose(l, :error) }
     end
 
     def log_verbose(message, level = :info)

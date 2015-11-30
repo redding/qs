@@ -1,12 +1,13 @@
+require 'much-plugin'
+
 module Qs
 
   module MessageHandler
+    include MuchPlugin
 
-    def self.included(klass)
-      klass.class_eval do
-        extend ClassMethods
-        include InstanceMethods
-      end
+    plugin_included do
+      extend ClassMethods
+      include InstanceMethods
     end
 
     module InstanceMethods

@@ -142,21 +142,6 @@ class Qs::PayloadHandler
 
   end
 
-  class RunWithExceptionWhileDebuggingTests < RunWithExceptionSetupTests
-    desc "and run with an exception"
-    setup do
-      ENV['QS_DEBUG'] = '1'
-    end
-    teardown do
-      ENV.delete('QS_DEBUG')
-    end
-
-    should "raise the exception" do
-      assert_raises(@route_exception.class){ @payload_handler.run }
-    end
-
-  end
-
   class LoggingJobSetupTests < InitSetupTests
     desc "and run with a job queue item"
     setup do
@@ -210,9 +195,11 @@ class Qs::PayloadHandler
     should "log the error" do
       logger_spy = subject.logger
       exception = @queue_item.exception
-      backtrace = exception.backtrace.join("\n")
-      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      exp = "[Qs] #{exception.class}: #{exception.message}"
       assert_equal exp, logger_spy.verbose.error_logged.first
+      exception.backtrace.each do |l|
+        assert_includes "[Qs] #{l}", logger_spy.verbose.error_logged
+      end
 
       exp = JobSummaryLine.new(@job, {
         'time'    => @queue_item.time_taken,
@@ -282,9 +269,11 @@ class Qs::PayloadHandler
     should "log the error" do
       logger_spy = subject.logger
       exception = @queue_item.exception
-      backtrace = exception.backtrace.join("\n")
-      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      exp = "[Qs] #{exception.class}: #{exception.message}"
       assert_equal exp, logger_spy.verbose.error_logged.first
+      exception.backtrace.each do |l|
+        assert_includes "[Qs] #{l}", logger_spy.verbose.error_logged
+      end
 
       exp = EventSummaryLine.new(@event, {
         'time'    => @queue_item.time_taken,
@@ -320,9 +309,11 @@ class Qs::PayloadHandler
 
       logger_spy = subject.logger
       exception = @queue_item.exception
-      backtrace = exception.backtrace.join("\n")
-      exp = "[Qs] #{exception.class}: #{exception.message}\n#{backtrace}"
+      exp = "[Qs] #{exception.class}: #{exception.message}"
       assert_equal exp, logger_spy.verbose.error_logged.first
+      exception.backtrace.each do |l|
+        assert_includes "[Qs] #{l}", logger_spy.verbose.error_logged
+      end
 
       exp = UnknownSummaryLine.new({
         'time'    => @queue_item.time_taken,
