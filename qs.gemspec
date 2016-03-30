@@ -8,8 +8,8 @@ Gem::Specification.new do |gem|
   gem.version     = Qs::VERSION
   gem.authors     = ["Kelly Redding", "Collin Redding"]
   gem.email       = ["kelly@kellyredding.com", "collin.redding@me.com"]
-  gem.description = %q{Define message queues. Process jobs and events. Profit.}
   gem.summary     = %q{Define message queues. Process jobs and events. Profit.}
+  gem.description = %q{Define message queues. Process jobs and events. Profit.}
   gem.homepage    = "http://github.com/redding/qs"
   gem.license     = 'MIT'
 
@@ -18,13 +18,13 @@ Gem::Specification.new do |gem|
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
   gem.require_paths = ["lib"]
 
-  gem.add_dependency("dat-worker-pool", ["~> 0.6"])
-  gem.add_dependency("hella-redis",     ["~> 0.3"])
-  gem.add_dependency("much-plugin",     ["~> 0.1"])
-  gem.add_dependency("ns-options",      ["~> 1.1"])
-  gem.add_dependency("SystemTimer",     ["~> 1.2"])
+  gem.add_development_dependency("assert", ["~> 2.15.1"])
+  gem.add_development_dependency("scmd",   ["~> 3.0.1"])
 
-  gem.add_development_dependency("assert", ["~> 2.15"])
-  gem.add_development_dependency("scmd",   ["~> 3.0"])
+  gem.add_dependency("dat-worker-pool", ["~> 0.6.0"])
+  gem.add_dependency("hella-redis",     ["~> 0.3.0"])
+  gem.add_dependency("much-plugin",     ["~> 0.1.0"])
+  gem.add_dependency("ns-options",      ["~> 1.1.6"])
+  gem.add_dependency("SystemTimer",     ["~> 1.2"])
 
 end
