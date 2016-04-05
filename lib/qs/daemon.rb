@@ -196,12 +196,12 @@ module Qs
       end
 
       def worker_class(new_worker_class = nil)
-        self.configuration.worker_class = new_worker_class if new_worker_class
+        self.configuration.worker_class = new_worker_class if !new_worker_class.nil?
         self.configuration.worker_class
       end
 
-      def worker_params(new_worker_params = nil )
-        self.configuration.worker_params = new_worker_params if new_worker_params
+      def worker_params(new_worker_params = nil)
+        self.configuration.worker_params = new_worker_params if !new_worker_params.nil?
         self.configuration.worker_params
       end
 
@@ -232,6 +232,10 @@ module Qs
 
       def queue(queue)
         self.configuration.queues << queue
+      end
+
+      def queues
+        self.configuration.queues
       end
 
     end

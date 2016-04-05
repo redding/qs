@@ -25,7 +25,7 @@ module Qs::Daemon
     should have_imeths :num_workers, :workers
     should have_imeths :verbose_logging, :logger
     should have_imeths :shutdown_timeout
-    should have_imeths :init, :error, :queue
+    should have_imeths :init, :error, :queue, :queues
 
     should "use much-plugin" do
       assert_includes MuchPlugin, Qs::Daemon
@@ -117,6 +117,12 @@ module Qs::Daemon
       new_queue = Factory.string
       subject.queue(new_queue)
       assert_includes new_queue, subject.configuration.queues
+    end
+
+    should "allow reading its configuration queues" do
+      new_queue = Factory.string
+      subject.queue(new_queue)
+      assert_equal [new_queue], subject.queues
     end
 
   end
