@@ -25,10 +25,10 @@ module Qs
 
     module InstanceMethods
 
-      attr_reader :redis_config, :redis
+      attr_reader :redis_connect_hash, :redis
 
-      def initialize(redis_config)
-        @redis_config = redis_config
+      def initialize(redis_connect_hash)
+        @redis_connect_hash = redis_connect_hash
       end
 
       def enqueue(queue, job_name, job_params = nil)
@@ -119,7 +119,7 @@ module Qs
 
     def initialize(*args)
       super
-      @redis = HellaRedis::Connection.new(self.redis_config)
+      @redis = HellaRedis::Connection.new(self.redis_connect_hash)
     end
 
     def push(queue_name, payload_hash)
@@ -145,7 +145,7 @@ module Qs
     def initialize(*args)
       super
       require 'hella-redis/connection_spy'
-      @redis = HellaRedis::ConnectionSpy.new(self.redis_config)
+      @redis = HellaRedis::ConnectionSpy.new(self.redis_connect_hash)
       @pushed_items = []
     end
 

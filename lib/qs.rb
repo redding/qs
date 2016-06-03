@@ -15,11 +15,7 @@ module Qs
   end
 
   def self.init
-    self.config.redis.url ||= RedisUrl.new(
-      self.config.redis.ip,
-      self.config.redis.port,
-      self.config.redis.db
-    )
+    self.config.validate!
 
     @dispatcher_queue ||= DispatcherQueue.new({
       :queue_class            => self.config.dispatcher_queue_class,
@@ -30,13 +26,13 @@ module Qs
 
     @encoder ||= self.config.encoder
     @decoder ||= self.config.decoder
-    @client  ||= Client.new(self.redis_config)
+    @client  ||= Client.new(self.redis_connect_hash)
     @redis   ||= @client.redis
     true
   end
 
   def self.reset!
-    self.config.reset
+    @config           = nil
     @dispatcher_queue = nil
     @encoder          = nil
     @decoder          = nil
@@ -89,8 +85,8 @@ module Qs
     @redis
   end
 
-  def self.redis_config
-    self.config.redis.to_hash
+  def self.redis_connect_hash
+    self.config.redis_connect_hash
   end
 
   def self.dispatcher_queue
@@ -119,32 +115,68 @@ module Qs
 
     option :event_publisher, String
 
-    namespace :redis do
-      option :ip,   :default => '127.0.0.1'
-      option :port, :default => 6379
-      option :db,   :default => 0
-
-      option :url
-
-      option :redis_ns, String,  :default => 'qs'
-      option :driver,   String,  :default => 'ruby'
-      option :timeout,  Integer, :default => 1
-      option :size,     Integer, :default => 4
-    end
-
     DEFAULT_DISPATCHER_QUEUE_CLASS            = Queue
     DEFAULT_DISPATCHER_QUEUE_NAME             = 'dispatcher'.freeze
     DEFAULT_DISPATCHER_JOB_NAME               = 'run_dispatch_job'.freeze
     DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME = DispatcherQueue::RunDispatchJob.to_s.freeze
 
+    DEFAULT_REDIS_IP      = '127.0.0.1'.freeze
+    DEFAULT_REDIS_PORT    = 6379.freeze
+    DEFAULT_REDIS_DB      = 0.freeze
+    DEFAULT_REDIS_NS      = 'qs'.freeze
+    DEFAULT_REDIS_DRIVER  = 'ruby'.freeze
+    DEFAULT_REDIS_TIMEOUT = 1.freeze
+    DEFAULT_REDIS_SIZE    = 4.freeze
+
     attr_accessor :dispatcher_queue_class, :dispatcher_queue_name
     attr_accessor :dispatcher_job_name, :dispatcher_job_handler_class_name
+
+    attr_accessor :redis_ip, :redis_port, :redis_db, :redis_ns
+    attr_accessor :redis_driver, :redis_timeout, :redis_size, :redis_url
 
     def initialize
       @dispatcher_queue_class            = DEFAULT_DISPATCHER_QUEUE_CLASS
       @dispatcher_queue_name             = DEFAULT_DISPATCHER_QUEUE_NAME
       @dispatcher_job_name               = DEFAULT_DISPATCHER_JOB_NAME
       @dispatcher_job_handler_class_name = DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME
+
+      @redis_ip      = DEFAULT_REDIS_IP
+      @redis_port    = DEFAULT_REDIS_PORT
+      @redis_db      = DEFAULT_REDIS_DB
+      @redis_ns      = DEFAULT_REDIS_NS
+      @redis_driver  = DEFAULT_REDIS_DRIVER
+      @redis_timeout = DEFAULT_REDIS_TIMEOUT
+      @redis_size    = DEFAULT_REDIS_SIZE
+      @redis_url     = nil
+
+      @valid = nil
+    end
+
+    # the keys here should be compatible with HellaRedis connection configs
+    # https://github.com/redding/hella-redis#connection
+    def redis_connect_hash
+      { :ip       => self.redis_ip,
+        :port     => self.redis_port,
+        :db       => self.redis_db,
+        :redis_ns => self.redis_ns,
+        :driver   => self.redis_driver,
+        :timeout  => self.redis_timeout,
+        :size     => self.redis_size,
+        :url      => self.redis_url
+      }
+    end
+
+    def valid?
+      !!@valid
+    end
+
+    def validate!
+      return @valid if !@valid.nil? # only need to run this once per config
+
+      # set the `redis_url`
+      self.redis_url ||= RedisUrl.new(self.redis_ip, self.redis_port, self.redis_db)
+
+      @valid = true
     end
 
   end

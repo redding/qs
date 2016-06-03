@@ -59,7 +59,7 @@ module Qs
         # set the size of the client to the num workers + 1, this ensures we
         # have 1 connection for fetching work from redis and at least 1
         # connection for each worker to requeue its message when hard-shutdown
-        @client = QsClient.new(Qs.redis_config.merge({
+        @client = QsClient.new(Qs.redis_connect_hash.merge({
           :timeout => 1,
           :size    => self.daemon_data.num_workers + 1
         }))

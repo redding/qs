@@ -176,11 +176,11 @@ module Qs::Daemon
 
     should "build a client" do
       assert_not_nil @client_spy
-      exp = Qs.redis_config.merge({
+      exp = Qs.redis_connect_hash.merge({
         :timeout => 1,
         :size    => subject.daemon_data.num_workers + 1
       })
-      assert_equal exp, @client_spy.redis_config
+      assert_equal exp, @client_spy.redis_connect_hash
     end
 
     should "build a dat-worker-pool worker pool" do
@@ -483,11 +483,6 @@ module Qs::Daemon
 
       @config_class = Config
       @config = Config.new
-
-      # @configuration = Configuration.new.tap do |c|
-      #   c.name Factory.string
-      #   c.queues << @queue
-      # end
     end
     subject{ @config }
 
