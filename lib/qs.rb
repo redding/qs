@@ -23,9 +23,9 @@ module Qs
 
     @dispatcher_queue ||= DispatcherQueue.new({
       :queue_class            => self.config.dispatcher_queue_class,
-      :queue_name             => self.config.dispatcher.queue_name,
-      :job_name               => self.config.dispatcher.job_name,
-      :job_handler_class_name => self.config.dispatcher.job_handler_class_name
+      :queue_name             => self.config.dispatcher_queue_name,
+      :job_name               => self.config.dispatcher_job_name,
+      :job_handler_class_name => self.config.dispatcher_job_handler_class_name
     })
 
     @encoder ||= self.config.encoder
@@ -98,7 +98,7 @@ module Qs
   end
 
   def self.dispatcher_job_name
-    self.config.dispatcher.job_name
+    self.config.dispatcher_job_name
   end
 
   def self.event_publisher
@@ -119,12 +119,6 @@ module Qs
 
     option :event_publisher, String
 
-    namespace :dispatcher do
-      option :queue_name,             String, :default => 'dispatcher'
-      option :job_name,               String, :default => 'run_dispatch_job'
-      option :job_handler_class_name, String, :default => DispatcherQueue::RunDispatchJob.to_s
-    end
-
     namespace :redis do
       option :ip,   :default => '127.0.0.1'
       option :port, :default => 6379
@@ -138,18 +132,30 @@ module Qs
       option :size,     Integer, :default => 4
     end
 
-    attr_accessor :dispatcher_queue_class
+    DEFAULT_DISPATCHER_QUEUE_CLASS            = Queue
+    DEFAULT_DISPATCHER_QUEUE_NAME             = 'dispatcher'.freeze
+    DEFAULT_DISPATCHER_JOB_NAME               = 'run_dispatch_job'.freeze
+    DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME = DispatcherQueue::RunDispatchJob.to_s.freeze
+
+    attr_accessor :dispatcher_queue_class, :dispatcher_queue_name
+    attr_accessor :dispatcher_job_name, :dispatcher_job_handler_class_name
 
     def initialize
-      self.dispatcher_queue_class = Queue
+      @dispatcher_queue_class            = DEFAULT_DISPATCHER_QUEUE_CLASS
+      @dispatcher_queue_name             = DEFAULT_DISPATCHER_QUEUE_NAME
+      @dispatcher_job_name               = DEFAULT_DISPATCHER_JOB_NAME
+      @dispatcher_job_handler_class_name = DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME
     end
+
   end
 
   module RedisUrl
+
     def self.new(ip, port, db)
       return if ip.to_s.empty? || port.to_s.empty? || db.to_s.empty?
       "redis://#{ip}:#{port}/#{db}"
     end
+
   end
 
 end

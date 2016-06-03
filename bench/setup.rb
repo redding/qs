@@ -16,7 +16,7 @@ else
   File.open('/dev/null', 'w')
 end
 
-Qs.config.dispatcher.queue_name = 'bench-dispatcher'
+Qs.config.dispatcher_queue_name = 'bench-dispatcher'
 Qs.config.event_publisher = 'Bench Script'
 Qs.init
 

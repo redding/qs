@@ -162,11 +162,11 @@ class Qs::Queue
 
     should "know its custom inspect" do
       reference = '0x0%x' % (subject.object_id << 1)
-      expected = "#<#{subject.class}:#{reference} " \
-                   "@name=#{subject.name.inspect} " \
-                   "@job_handler_ns=#{subject.job_handler_ns.inspect} " \
-                   "@event_handler_ns=#{subject.event_handler_ns.inspect}>"
-      assert_equal expected, subject.inspect
+      exp = "#<#{subject.class}:#{reference} " \
+            "@name=#{subject.name.inspect} " \
+            "@job_handler_ns=#{subject.job_handler_ns.inspect} " \
+            "@event_handler_ns=#{subject.event_handler_ns.inspect}>"
+      assert_equal exp, subject.inspect
     end
 
     should "require a name when initialized" do

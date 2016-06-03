@@ -45,8 +45,8 @@ module Qs
     end
 
     should "know its redis config" do
-      expected = subject.config.redis.to_hash
-      assert_equal expected, subject.redis_config
+      exp = subject.config.redis.to_hash
+      assert_equal exp, subject.redis_config
     end
 
   end
@@ -74,23 +74,23 @@ module Qs
     end
 
     should "set its configured redis url" do
-      expected = RedisUrl.new(
+      exp = RedisUrl.new(
         subject.config.redis.ip,
         subject.config.redis.port,
         subject.config.redis.db
       )
-      assert_equal expected, subject.config.redis.url
+      assert_equal exp, subject.config.redis.url
     end
 
     should "build a dispatcher queue" do
       assert_equal @dispatcher_queue_spy, subject.dispatcher_queue
-      exp = subject.config.dispatcher_queue_class
-      assert_equal exp, @dispatcher_queue_spy.queue_class
-      dispatcher_config = subject.config.dispatcher
-      assert_equal dispatcher_config.queue_name, @dispatcher_queue_spy.queue_name
-      assert_equal dispatcher_config.job_name,   @dispatcher_queue_spy.job_name
-      exp = dispatcher_config.job_handler_class_name
-      assert_equal exp, @dispatcher_queue_spy.job_handler_class_name
+
+      c   = subject.config
+      spy = @dispatcher_queue_spy
+      assert_equal c.dispatcher_queue_class,            spy.queue_class
+      assert_equal c.dispatcher_queue_name,             spy.queue_name
+      assert_equal c.dispatcher_job_name,               spy.job_name
+      assert_equal c.dispatcher_job_handler_class_name, spy.job_handler_class_name
     end
 
     should "build a client" do
@@ -149,14 +149,12 @@ module Qs
 
     should "use the configured encoder using `encode`" do
       value = Factory.integer
-      result = subject.encode(value)
-      assert_equal value.to_s, result
+      assert_equal value.to_s, subject.encode(value)
     end
 
     should "use the configured decoder using `decode`" do
       value = Factory.integer.to_s
-      result = subject.decode(value)
-      assert_equal value.to_i, result
+      assert_equal value.to_i, subject.decode(value)
     end
 
     should "demeter its clients subscription methods" do
@@ -180,17 +178,18 @@ module Qs
     end
 
     should "know its dispatcher job name and event publisher" do
-      exp = subject.config.dispatcher.job_name
+      exp = subject.config.dispatcher_job_name
       assert_equal exp, subject.dispatcher_job_name
+
       exp = subject.config.event_publisher
       assert_equal exp, subject.event_publisher
     end
 
     should "return the dispatcher queue published events using `published_events`" do
-      queue = subject.dispatcher_queue
-      published_events = Factory.integer(3).times.map{ Factory.string }
-      Assert.stub(queue, :published_events){ published_events }
-      assert_equal queue.published_events, subject.published_events
+      exp = Factory.integer(3).times.map{ Factory.string }
+      Assert.stub(subject.dispatcher_queue, :published_events){ exp }
+
+      assert_equal exp, subject.published_events
     end
 
     should "not reset its attributes when init again" do
@@ -198,6 +197,7 @@ module Qs
       client = subject.client
       redis  = subject.redis
       subject.init
+
       assert_same queue,  subject.dispatcher_queue
       assert_same client, subject.client
       assert_same redis,  subject.redis
@@ -205,6 +205,7 @@ module Qs
 
     should "reset itself using `reset!`" do
       subject.reset!
+
       assert_nil subject.config.redis.url
       assert_nil subject.dispatcher_queue
       assert_nil subject.client
@@ -226,8 +227,9 @@ module Qs
 
     should have_options :encoder, :decoder, :timeout
     should have_options :event_publisher
-    should have_namespace :dispatcher, :redis
-    should have_accessors :dispatcher_queue_class
+    should have_namespace :redis
+    should have_accessors :dispatcher_queue_class, :dispatcher_queue_name
+    should have_accessors :dispatcher_job_name, :dispatcher_job_handler_class_name
 
     should "know its default decoder/encoder" do
       payload = { Factory.string => Factory.string }
@@ -247,14 +249,6 @@ module Qs
       assert_nil subject.event_publisher
     end
 
-    should "know its default dispatcher options" do
-      assert_equal Queue, subject.dispatcher_queue_class
-      assert_equal 'dispatcher', subject.dispatcher.queue_name
-      assert_equal 'run_dispatch_job', subject.dispatcher.job_name
-      exp = DispatcherQueue::RunDispatchJob.to_s
-      assert_equal exp, subject.dispatcher.job_handler_class_name
-    end
-
     should "know its default redis options" do
       assert_equal '127.0.0.1', subject.redis.ip
       assert_equal 6379,        subject.redis.port
@@ -264,6 +258,26 @@ module Qs
       assert_equal 1,           subject.redis.timeout
       assert_equal 4,           subject.redis.size
       assert_nil subject.redis.url
+    end
+
+    should "know its default attr values" do
+      assert_equal Queue,              Config::DEFAULT_DISPATCHER_QUEUE_CLASS
+      assert_equal 'dispatcher',       Config::DEFAULT_DISPATCHER_QUEUE_NAME
+      assert_equal 'run_dispatch_job', Config::DEFAULT_DISPATCHER_JOB_NAME
+
+      exp = DispatcherQueue::RunDispatchJob.to_s
+      assert_equal exp, Config::DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME
+    end
+
+    should "default its attrs" do
+      c = subject.class
+
+      assert_equal c::DEFAULT_DISPATCHER_QUEUE_CLASS, subject.dispatcher_queue_class
+      assert_equal c::DEFAULT_DISPATCHER_QUEUE_NAME,  subject.dispatcher_queue_name
+      assert_equal c::DEFAULT_DISPATCHER_JOB_NAME,    subject.dispatcher_job_name
+
+      exp = c::DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME
+      assert_equal exp, subject.dispatcher_job_handler_class_name
     end
 
   end
@@ -276,8 +290,8 @@ module Qs
       ip   = Factory.string
       port = Factory.integer
       db   = Factory.integer
-      expected = "redis://#{ip}:#{port}/#{db}"
-      assert_equal expected, subject.new(ip, port, db)
+      exp = "redis://#{ip}:#{port}/#{db}"
+      assert_equal exp, subject.new(ip, port, db)
     end
 
     should "not return a url with an ip, port or db" do
