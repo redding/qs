@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs'
 
-require 'test/support/app_daemon'
+require 'test/support/app_queue'
 
 class Qs::Queue
 

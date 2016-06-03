@@ -35,7 +35,7 @@ module Qs
       full_path_with_sanford
     end
 
-    # This evaluates the file and creates a proc using it's contents. This is
+    # This evaluates the file and creates a proc using its contents. This is
     # a trick borrowed from Rack. It is essentially converting a file into a
     # proc and then instance eval'ing it. This has a couple benefits:
     # * The obvious benefit is the file is evaluated in the context of this

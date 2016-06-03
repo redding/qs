@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs/daemon'
 
-require 'test/support/app_daemon'
+require 'test/support/app_queue'
 
 module Qs::Daemon
 
@@ -15,11 +15,11 @@ module Qs::Daemon
       Qs.config.event_publisher       = 'Daemon System Tests'
       Qs.init
       AppQueue.sync_subscriptions
-      @orig_config = AppDaemon.configuration.to_hash
+
+      @app_daemon_class = build_app_daemon_class
     end
     teardown do
       @daemon_runner.stop if @daemon_runner
-      AppDaemon.configuration.apply(@orig_config) # reset daemon config
       Qs.redis.with do |c|
         keys = c.keys('*qs-app*')
         c.pipelined{ keys.each{ |k| c.del(k) } }
@@ -32,10 +32,42 @@ module Qs::Daemon
 
     private
 
+    # manually build new anonymous app daemon classes for each run.  We do this
+    # both to not mess with global state when tweaking config values for tests
+    # and b/c there is no way to "reset" an existing class's config.
+    def build_app_daemon_class
+      Class.new do
+        include Qs::Daemon
+
+        name 'qs-app'
+
+        logger Logger.new(ROOT_PATH.join('log/app_daemon.log').to_s)
+        logger.datetime_format = "" # turn off the datetime in the logs
+
+        verbose_logging true
+
+        queue AppQueue
+
+        error do |exception, context|
+          return unless (message = context.message)
+          payload_type = message.payload_type
+          route_name   = message.route_name
+          case(route_name)
+          when 'error', 'timeout', 'qs-app:error', 'qs-app:timeout'
+            error = "#{exception.class}: #{exception.message}"
+            Qs.redis.with{ |c| c.set("qs-app:last_#{payload_type}_error", error) }
+          when 'slow', 'qs-app:slow'
+            error = exception.class.to_s
+            Qs.redis.with{ |c| c.set("qs-app:last_#{payload_type}_error", error) }
+          end
+        end
+      end
+    end
+
     def setup_app_and_dispatcher_daemon
-      @app_daemon        = AppDaemon.new
-      @dispatcher_daemon = DispatcherDaemon.new
-      @daemon_runner     = DaemonRunner.new(@app_daemon, @dispatcher_daemon)
+      @app_daemon        = @app_daemon_class.new
+      @dispatcher_daemon = AppDispatcherDaemon.new
+      @daemon_runner     = AppDaemonRunner.new(@app_daemon, @dispatcher_daemon)
       @app_thread        = @daemon_runner.start
     end
 
@@ -147,7 +179,7 @@ module Qs::Daemon
   class ShutdownWithoutTimeoutTests < SystemTests
     desc "without a shutdown timeout"
     setup do
-      AppDaemon.shutdown_timeout nil # disable shutdown timeout
+      @app_daemon_class.shutdown_timeout nil # disable shutdown timeout
       setup_app_and_dispatcher_daemon
 
       AppQueue.add('slow')
@@ -180,7 +212,7 @@ module Qs::Daemon
   class ShutdownWithTimeoutTests < SystemTests
     desc "with a shutdown timeout"
     setup do
-      AppDaemon.shutdown_timeout 1
+      @app_daemon_class.shutdown_timeout 1
       setup_app_and_dispatcher_daemon
 
       AppQueue.add('slow')
@@ -219,8 +251,8 @@ module Qs::Daemon
     setup do
       Assert.stub(Qs::PayloadHandler, :new){ sleep 5 }
 
-      AppDaemon.shutdown_timeout 1
-      AppDaemon.workers 2
+      @app_daemon_class.shutdown_timeout 1
+      @app_daemon_class.workers 2
       setup_app_and_dispatcher_daemon
 
       AppQueue.add('slow')
@@ -254,7 +286,7 @@ module Qs::Daemon
     setup do
       ENV['QS_PROCESS_LABEL'] = Factory.string
 
-      @daemon = AppDaemon.new
+      @daemon = @app_daemon_class.new
     end
     teardown do
       ENV.delete('QS_PROCESS_LABEL')
@@ -267,7 +299,27 @@ module Qs::Daemon
 
   end
 
-  class DaemonRunner
+  class AppDispatcherDaemon
+    include Qs::Daemon
+
+    name 'qs-app-dispatcher'
+
+    logger Logger.new(ROOT_PATH.join('log/app_dispatcher_daemon.log').to_s)
+    logger.datetime_format = "" # turn off the datetime in the logs
+
+    verbose_logging true
+
+    # we build a "custom" dispatcher because we can't rely on Qs being initialized
+    # when this is required
+    queue Qs::DispatcherQueue.new({
+      :queue_class            => Qs.config.dispatcher_queue_class,
+      :queue_name             => 'qs-app-dispatcher',
+      :job_name               => Qs.config.dispatcher.job_name,
+      :job_handler_class_name => Qs.config.dispatcher.job_handler_class_name
+    })
+  end
+
+  class AppDaemonRunner
     def initialize(app_daemon, dispatcher_daemon = nil)
       @app_daemon = app_daemon
       @dispatcher_daemon = dispatcher_daemon
