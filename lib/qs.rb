@@ -1,4 +1,3 @@
-require 'ns-options'
 require 'qs/version'
 require 'qs/client'
 require 'qs/daemon'
@@ -106,14 +105,9 @@ module Qs
   end
 
   class Config
-    include NsOptions::Proxy
 
-    option :encoder, Proc, :default => proc{ |p| ::JSON.dump(p) }
-    option :decoder, Proc, :default => proc{ |p| ::JSON.load(p) }
-
-    option :timeout, Float
-
-    option :event_publisher, String
+    DEFAULT_ENCODER = proc{ |payload|         ::JSON.dump(payload)         }
+    DEFAULT_DECODER = proc{ |encoded_payload| ::JSON.load(encoded_payload) }
 
     DEFAULT_DISPATCHER_QUEUE_CLASS            = Queue
     DEFAULT_DISPATCHER_QUEUE_NAME             = 'dispatcher'.freeze
@@ -128,13 +122,18 @@ module Qs
     DEFAULT_REDIS_TIMEOUT = 1.freeze
     DEFAULT_REDIS_SIZE    = 4.freeze
 
+    attr_accessor :encoder, :decoder, :timeout, :event_publisher
     attr_accessor :dispatcher_queue_class, :dispatcher_queue_name
     attr_accessor :dispatcher_job_name, :dispatcher_job_handler_class_name
-
     attr_accessor :redis_ip, :redis_port, :redis_db, :redis_ns
     attr_accessor :redis_driver, :redis_timeout, :redis_size, :redis_url
 
     def initialize
+      @encoder         = DEFAULT_ENCODER
+      @decoder         = DEFAULT_DECODER
+      @timeout         = nil
+      @event_publisher = nil
+
       @dispatcher_queue_class            = DEFAULT_DISPATCHER_QUEUE_CLASS
       @dispatcher_queue_name             = DEFAULT_DISPATCHER_QUEUE_NAME
       @dispatcher_job_name               = DEFAULT_DISPATCHER_JOB_NAME
