@@ -11,7 +11,7 @@ module Qs::Daemon
       Qs.reset!
       @qs_test_mode = ENV['QS_TEST_MODE']
       ENV['QS_TEST_MODE'] = nil
-      Qs.config.dispatcher.queue_name = 'qs-app-dispatcher'
+      Qs.config.dispatcher_queue_name = 'qs-app-dispatcher'
       Qs.config.event_publisher       = 'Daemon System Tests'
       Qs.init
       AppQueue.sync_subscriptions
@@ -314,8 +314,8 @@ module Qs::Daemon
     queue Qs::DispatcherQueue.new({
       :queue_class            => Qs.config.dispatcher_queue_class,
       :queue_name             => 'qs-app-dispatcher',
-      :job_name               => Qs.config.dispatcher.job_name,
-      :job_handler_class_name => Qs.config.dispatcher.job_handler_class_name
+      :job_name               => Qs.config.dispatcher_job_name,
+      :job_handler_class_name => Qs.config.dispatcher_job_handler_class_name
     })
   end
 
