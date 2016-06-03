@@ -3,8 +3,8 @@ require 'qs/client'
 class ClientSpy < Qs::TestClient
   attr_reader :calls
 
-  def initialize(redis_config = nil)
-    super(redis_config || {})
+  def initialize(redis_connect_hash = nil)
+    super(redis_connect_hash || {})
     @calls = []
     @list  = []
     @mutex = Mutex.new

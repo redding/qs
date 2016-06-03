@@ -24,7 +24,7 @@ module Qs
     should have_imeths :encode, :decode
     should have_imeths :sync_subscriptions, :clear_subscriptions
     should have_imeths :event_subscribers
-    should have_imeths :client, :redis, :redis_config
+    should have_imeths :client, :redis, :redis_connect_hash
     should have_imeths :dispatcher_queue, :dispatcher_job_name
     should have_imeths :event_publisher
     should have_imeths :published_events
@@ -33,7 +33,7 @@ module Qs
       assert_instance_of Config, subject.config
     end
 
-    should "allow configuring its config" do
+    should "configure its config" do
       yielded = nil
       subject.configure{ |c| yielded = c }
       assert_same subject.config, yielded
@@ -45,8 +45,8 @@ module Qs
     end
 
     should "know its redis config" do
-      exp = subject.config.redis.to_hash
-      assert_equal exp, subject.redis_config
+      exp = subject.config.redis_connect_hash
+      assert_equal exp, subject.redis_connect_hash
     end
 
   end
@@ -56,9 +56,9 @@ module Qs
     setup do
       @module.config.encoder    = proc{ |v| v.to_s }
       @module.config.decoder    = proc{ |v| v.to_i }
-      @module.config.redis.ip   = Factory.string
-      @module.config.redis.port = Factory.integer
-      @module.config.redis.db   = Factory.integer
+      @module.config.redis_ip   = Factory.string
+      @module.config.redis_port = Factory.integer
+      @module.config.redis_db   = Factory.integer
 
       @dispatcher_queue_spy = nil
       Assert.stub(DispatcherQueue, :new) do |*args|
@@ -73,13 +73,8 @@ module Qs
       @module.init
     end
 
-    should "set its configured redis url" do
-      exp = RedisUrl.new(
-        subject.config.redis.ip,
-        subject.config.redis.port,
-        subject.config.redis.db
-      )
-      assert_equal exp, subject.config.redis.url
+    should "validate its config" do
+      assert_true subject.config.valid?
     end
 
     should "build a dispatcher queue" do
@@ -94,9 +89,10 @@ module Qs
     end
 
     should "build a client" do
-      assert_equal @client_spy,          subject.client
-      assert_equal @client_spy.redis,    subject.redis
-      assert_equal subject.redis_config, @client_spy.redis_config
+      assert_equal @client_spy,       subject.client
+      assert_equal @client_spy.redis, subject.redis
+
+      assert_equal subject.redis_connect_hash, @client_spy.redis_connect_hash
     end
 
     should "call enqueue on its client using `enqueue`" do
@@ -193,11 +189,13 @@ module Qs
     end
 
     should "not reset its attributes when init again" do
+      config = subject.config
       queue  = subject.dispatcher_queue
       client = subject.client
       redis  = subject.redis
       subject.init
 
+      assert_same config, subject.config
       assert_same queue,  subject.dispatcher_queue
       assert_same client, subject.client
       assert_same redis,  subject.redis
@@ -206,7 +204,7 @@ module Qs
     should "reset itself using `reset!`" do
       subject.reset!
 
-      assert_nil subject.config.redis.url
+      assert_false subject.config.valid?
       assert_nil subject.dispatcher_queue
       assert_nil subject.client
       assert_nil subject.redis
@@ -227,9 +225,11 @@ module Qs
 
     should have_options :encoder, :decoder, :timeout
     should have_options :event_publisher
-    should have_namespace :redis
     should have_accessors :dispatcher_queue_class, :dispatcher_queue_name
     should have_accessors :dispatcher_job_name, :dispatcher_job_handler_class_name
+    should have_accessors :redis_ip, :redis_port, :redis_db, :redis_ns
+    should have_accessors :redis_driver, :redis_timeout, :redis_size, :redis_url
+    should have_imeths :redis_connect_hash, :valid?, :validate!
 
     should "know its default decoder/encoder" do
       payload = { Factory.string => Factory.string }
@@ -249,17 +249,6 @@ module Qs
       assert_nil subject.event_publisher
     end
 
-    should "know its default redis options" do
-      assert_equal '127.0.0.1', subject.redis.ip
-      assert_equal 6379,        subject.redis.port
-      assert_equal 0,           subject.redis.db
-      assert_equal 'qs',        subject.redis.redis_ns
-      assert_equal 'ruby',      subject.redis.driver
-      assert_equal 1,           subject.redis.timeout
-      assert_equal 4,           subject.redis.size
-      assert_nil subject.redis.url
-    end
-
     should "know its default attr values" do
       assert_equal Queue,              Config::DEFAULT_DISPATCHER_QUEUE_CLASS
       assert_equal 'dispatcher',       Config::DEFAULT_DISPATCHER_QUEUE_NAME
@@ -267,6 +256,14 @@ module Qs
 
       exp = DispatcherQueue::RunDispatchJob.to_s
       assert_equal exp, Config::DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME
+
+      assert_equal '127.0.0.1', Config::DEFAULT_REDIS_IP
+      assert_equal 6379,        Config::DEFAULT_REDIS_PORT
+      assert_equal 0,           Config::DEFAULT_REDIS_DB
+      assert_equal 'qs',        Config::DEFAULT_REDIS_NS
+      assert_equal 'ruby',      Config::DEFAULT_REDIS_DRIVER
+      assert_equal 1,           Config::DEFAULT_REDIS_TIMEOUT
+      assert_equal 4,           Config::DEFAULT_REDIS_SIZE
     end
 
     should "default its attrs" do
@@ -278,6 +275,61 @@ module Qs
 
       exp = c::DEFAULT_DISPATCHER_JOB_HANDLER_CLASS_NAME
       assert_equal exp, subject.dispatcher_job_handler_class_name
+
+      assert_equal c::DEFAULT_REDIS_IP,      subject.redis_ip
+      assert_equal c::DEFAULT_REDIS_PORT,    subject.redis_port
+      assert_equal c::DEFAULT_REDIS_DB,      subject.redis_db
+      assert_equal c::DEFAULT_REDIS_NS,      subject.redis_ns
+      assert_equal c::DEFAULT_REDIS_DRIVER,  subject.redis_driver
+      assert_equal c::DEFAULT_REDIS_TIMEOUT, subject.redis_timeout
+      assert_equal c::DEFAULT_REDIS_SIZE,    subject.redis_size
+
+      assert_nil subject.redis_url
+    end
+
+    should "know its redis connect hash" do
+      exp = {
+        :ip       => subject.redis_ip,
+        :port     => subject.redis_port,
+        :db       => subject.redis_db,
+        :redis_ns => subject.redis_ns,
+        :driver   => subject.redis_driver,
+        :timeout  => subject.redis_timeout,
+        :size     => subject.redis_size,
+        :url      => subject.redis_url
+      }
+      assert_equal exp, subject.redis_connect_hash
+    end
+
+    should "not be valid until validate! has been called" do
+      assert_false subject.valid?
+
+      subject.validate!
+      assert_true subject.valid?
+    end
+
+    should "set its redis url on validate!" do
+      assert_nil subject.redis_url
+      subject.validate!
+
+      exp = RedisUrl.new(subject.redis_ip, subject.redis_port, subject.redis_db)
+      assert_equal exp, subject.redis_url
+    end
+
+    should "only be able to be validated once" do
+      subject.validate!
+
+      exp = RedisUrl.new(subject.redis_ip, subject.redis_port, subject.redis_db)
+      assert_equal exp, subject.redis_url
+
+      new_ip = Factory.string
+      subject.redis_ip = new_ip
+      subject.validate!
+
+      orig_exp = exp
+      new_exp  = RedisUrl.new(new_ip, subject.redis_port, subject.redis_db)
+      assert_not_equal new_exp, subject.redis_url
+      assert_equal orig_exp, subject.redis_url
     end
 
   end
@@ -316,17 +368,17 @@ module Qs
   end
 
   class ClientSpy
-    attr_reader :redis_config, :redis
+    attr_reader :redis_connect_hash, :redis
     attr_reader :enqueue_calls, :publish_calls, :push_calls
     attr_reader :sync_subscriptions_calls, :clear_subscriptions_calls
     attr_reader :event_subscribers_calls
 
     def initialize(redis_confg)
-      @redis_config  = redis_confg
-      @redis         = Factory.string
-      @enqueue_calls = []
-      @publish_calls = []
-      @push_calls    = []
+      @redis_connect_hash = redis_confg
+      @redis              = Factory.string
+      @enqueue_calls      = []
+      @publish_calls      = []
+      @push_calls         = []
       @sync_subscriptions_calls  = []
       @clear_subscriptions_calls = []
       @event_subscribers_calls   = []

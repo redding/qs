@@ -15,7 +15,7 @@ module Qs::Client
       ENV['QS_TEST_MODE'] = 'yes'
       Qs.init
 
-      @redis_config = Qs.redis_config
+      @redis_connect_hash = Qs.redis_connect_hash
       @queue        = Qs::Queue.new{ name Factory.string }
       @job_name     = Factory.string
       @job_params   = { Factory.string => Factory.string }
@@ -30,12 +30,12 @@ module Qs::Client
 
     should "return a qs client using `new`" do
       ENV.delete('QS_TEST_MODE')
-      client = subject.new(@redis_config)
+      client = subject.new(@redis_connect_hash)
       assert_instance_of Qs::QsClient, client
     end
 
     should "return a test client using `new` in test mode" do
-      client = subject.new(@redis_config)
+      client = subject.new(@redis_connect_hash)
       assert_instance_of Qs::TestClient, client
     end
 
@@ -43,11 +43,11 @@ module Qs::Client
 
   class MixinTests < UnitTests
     setup do
-      @client = FakeClient.new(@redis_config)
+      @client = FakeClient.new(@redis_connect_hash)
     end
     subject{ @client }
 
-    should have_readers :redis_config, :redis
+    should have_readers :redis_connect_hash, :redis
     should have_imeths :enqueue, :publish, :publish_as, :push
     should have_imeths :block_dequeue
     should have_imeths :append, :prepend
@@ -56,7 +56,7 @@ module Qs::Client
     should have_imeths :event_subscribers
 
     should "know its redis config" do
-      assert_equal @redis_config, subject.redis_config
+      assert_equal @redis_connect_hash, subject.redis_connect_hash
     end
 
     should "not have a redis connection" do
@@ -122,7 +122,7 @@ module Qs::Client
 
   class RedisCallTests < MixinTests
     setup do
-      @connection_spy = HellaRedis::ConnectionSpy.new(@client.redis_config)
+      @connection_spy = HellaRedis::ConnectionSpy.new(@client.redis_connect_hash)
       Assert.stub(@client, :redis){ @connection_spy }
 
       @queue_redis_key = Factory.string
@@ -284,13 +284,13 @@ module Qs::Client
         @connection_spy = HellaRedis::ConnectionSpy.new(*args)
       end
 
-      @client = @client_class.new(@redis_config)
+      @client = @client_class.new(@redis_connect_hash)
     end
     subject{ @client }
 
     should "build a redis connection" do
       assert_not_nil @connection_spy
-      assert_equal @connection_spy.config, subject.redis_config
+      assert_equal @connection_spy.config, subject.redis_connect_hash
       assert_equal @connection_spy, subject.redis
     end
 
@@ -338,7 +338,7 @@ module Qs::Client
       @serialized_job = nil
       Assert.stub(Qs::Payload, :serialize){ |job| @serialized_job = job }
 
-      @client = @client_class.new(@redis_config)
+      @client = @client_class.new(@redis_connect_hash)
     end
     subject{ @client }
 
@@ -347,7 +347,7 @@ module Qs::Client
 
     should "build a redis connection spy" do
       assert_instance_of HellaRedis::ConnectionSpy, subject.redis
-      assert_equal @redis_config, subject.redis.config
+      assert_equal @redis_connect_hash, subject.redis.config
     end
 
     should "default its pushed items" do
