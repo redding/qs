@@ -211,7 +211,7 @@ module Qs::MessageHandler
       @handler.qs_run
     end
 
-    should "call `run!` and it's callbacks" do
+    should "call `run!` and its callbacks" do
       assert_equal 6,  subject.first_before_run_call_order
       assert_equal 7,  subject.second_before_run_call_order
       assert_equal 8,  subject.run_call_order

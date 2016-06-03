@@ -15,7 +15,7 @@ class Qs::ConfigFile
     should have_imeths :run
 
     should "know its daemon" do
-      assert_instance_of AppDaemon, subject.daemon
+      assert_instance_of ConfigFileTestDaemon, subject.daemon
     end
 
     should "define constants in the file at the top-level binding" do
@@ -35,7 +35,7 @@ class Qs::ConfigFile
       assert_nothing_raised do
         config_file = Qs::ConfigFile.new(file_path)
       end
-      assert_instance_of AppDaemon, config_file.daemon
+      assert_instance_of ConfigFileTestDaemon, config_file.daemon
     end
 
     should "raise no config file error when the file doesn't exist" do

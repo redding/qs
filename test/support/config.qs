@@ -1,7 +1,14 @@
-require 'test/support/app_daemon'
+require 'test/support/app_queue'
 
 if !defined?(TestConstant)
   TestConstant = Class.new
 end
 
-run AppDaemon.new
+class ConfigFileTestDaemon
+  include Qs::Daemon
+
+  name  'qs-config-file-test'
+  queue AppQueue
+end
+
+run ConfigFileTestDaemon.new

@@ -3,9 +3,9 @@ require 'qs/daemon'
 
 require 'dat-worker-pool/worker_pool_spy'
 require 'much-plugin'
-require 'ns-options/assert_macros'
 require 'thread'
 require 'qs/client'
+require 'qs/logger'
 require 'qs/queue'
 require 'qs/queue_item'
 require 'test/support/client_spy'
@@ -19,110 +19,67 @@ module Qs::Daemon
     end
     subject{ @daemon_class }
 
-    should have_imeths :configuration
-    should have_imeths :name, :pid_file
-    should have_imeths :worker_class, :worker_params
-    should have_imeths :num_workers, :workers
-    should have_imeths :verbose_logging, :logger
-    should have_imeths :shutdown_timeout
-    should have_imeths :init, :error, :queue, :queues
+    should have_imeths :config
+    should have_imeths :name, :pid_file, :shutdown_timeout
+    should have_imeths :worker_class, :worker_params, :num_workers, :workers
+    should have_imeths :init, :error, :logger, :queue, :queues
+    should have_imeths :verbose_logging
 
     should "use much-plugin" do
       assert_includes MuchPlugin, Qs::Daemon
     end
 
-    should "know its configuration" do
-      config = subject.configuration
-      assert_instance_of Configuration, config
-      assert_same config, subject.configuration
-    end
+    should "allow setting its config values" do
+      config = subject.config
 
-    should "allow reading/writing its configuration name" do
-      new_name = Factory.string
-      subject.name(new_name)
-      assert_equal new_name, subject.configuration.name
-      assert_equal new_name, subject.name
-    end
+      exp = Factory.string
+      subject.name exp
+      assert_equal exp, config.name
 
-    should "allow reading/writing its configuration pid file" do
-      new_pid_file = Factory.string
-      subject.pid_file(new_pid_file)
-      expected = Pathname.new(new_pid_file)
-      assert_equal expected, subject.configuration.pid_file
-      assert_equal expected, subject.pid_file
-    end
+      exp = Factory.file_path
+      subject.pid_file exp
+      assert_equal exp, config.pid_file
 
-    should "allow reading/writing its configuration worker class" do
-      new_worker_class = Class.new
-      subject.worker_class(new_worker_class)
-      assert_equal new_worker_class, subject.configuration.worker_class
-      assert_equal new_worker_class, subject.worker_class
-    end
+      exp = Factory.integer
+      subject.shutdown_timeout exp
+      assert_equal exp, config.shutdown_timeout
 
-    should "allow reading/writing its configuration worker params" do
-      new_worker_params = { Factory.string => Factory.string }
-      subject.worker_params(new_worker_params)
-      assert_equal new_worker_params, subject.configuration.worker_params
-      assert_equal new_worker_params, subject.worker_params
-    end
+      exp = Class.new
+      subject.worker_class exp
+      assert_equal exp, subject.config.worker_class
 
-    should "allow reading/writing its configuration num workers" do
-      new_num_workers = Factory.integer
-      subject.num_workers(new_num_workers)
-      assert_equal new_num_workers, subject.configuration.num_workers
-      assert_equal new_num_workers, subject.num_workers
-    end
+      exp = { Factory.string => Factory.string }
+      subject.worker_params exp
+      assert_equal exp, subject.config.worker_params
 
-    should "alias workers as num workers" do
-      new_workers = Factory.integer
-      subject.workers(new_workers)
-      assert_equal new_workers, subject.configuration.num_workers
-      assert_equal new_workers, subject.workers
-    end
+      exp = Factory.integer
+      subject.num_workers(exp)
+      assert_equal exp, subject.config.num_workers
+      assert_equal exp, subject.workers
 
-    should "allow reading/writing its configuration verbose logging" do
-      new_verbose = Factory.boolean
-      subject.verbose_logging(new_verbose)
-      assert_equal new_verbose, subject.configuration.verbose_logging
-      assert_equal new_verbose, subject.verbose_logging
-    end
+      exp = proc{ }
+      assert_equal 0, config.init_procs.size
+      subject.init(&exp)
+      assert_equal 1, config.init_procs.size
+      assert_equal exp, config.init_procs.first
 
-    should "allow reading/writing its configuration logger" do
-      new_logger = Factory.string
-      subject.logger(new_logger)
-      assert_equal new_logger, subject.configuration.logger
-      assert_equal new_logger, subject.logger
-    end
+      exp = proc{ }
+      assert_equal 0, config.error_procs.size
+      subject.error(&exp)
+      assert_equal 1, config.error_procs.size
+      assert_equal exp, config.error_procs.first
 
-    should "allow reading/writing its configuration shutdown timeout" do
-      new_shutdown_timeout = Factory.integer
-      subject.shutdown_timeout(new_shutdown_timeout)
-      assert_equal new_shutdown_timeout, subject.configuration.shutdown_timeout
-      assert_equal new_shutdown_timeout, subject.shutdown_timeout
-    end
+      exp = Logger.new(STDOUT)
+      subject.logger exp
+      assert_equal exp, config.logger
 
-    should "allow adding init procs to its configuration" do
-      new_init_proc = proc{ Factory.string }
-      subject.init(&new_init_proc)
-      assert_includes new_init_proc, subject.configuration.init_procs
-    end
+      exp = Factory.string
+      subject.queue(exp)
+      assert_equal [exp], subject.config.queues
 
-    should "allow adding error procs to its configuration" do
-      new_error_proc = proc{ Factory.string }
-      subject.error(&new_error_proc)
-      assert_includes new_error_proc, subject.configuration.error_procs
-    end
-
-    should "allow adding queues to its configuration" do
-      new_queue = Factory.string
-      subject.queue(new_queue)
-      assert_includes new_queue, subject.configuration.queues
-    end
-
-    should "allow reading its configuration queues" do
-      new_queue = Factory.string
-      subject.queue(new_queue)
-      assert_equal [new_queue], subject.queues
+      exp = Factory.boolean
+      subject.verbose_logging exp
+      assert_equal exp, config.verbose_logging
     end
 
   end
@@ -134,10 +91,10 @@ module Qs::Daemon
 
       @daemon_class.name Factory.string
       @daemon_class.pid_file Factory.file_path
-      @daemon_class.worker_params(Factory.string => Factory.string)
-      @daemon_class.workers Factory.integer
-      @daemon_class.verbose_logging Factory.boolean
       @daemon_class.shutdown_timeout Factory.integer
+      @daemon_class.worker_params(Factory.string => Factory.string)
+      @daemon_class.num_workers Factory.integer
+      @daemon_class.verbose_logging Factory.boolean
       @daemon_class.error{ Factory.string }
 
       @queue = Qs::Queue.new do
@@ -175,53 +132,46 @@ module Qs::Daemon
     end
     subject{ @daemon }
 
-    should have_readers :daemon_data, :logger
-    should have_readers :signals_redis_key, :queue_redis_keys
+    should have_readers :daemon_data, :signals_redis_key
     should have_imeths :name, :process_label, :pid_file
+    should have_imeths :logger, :queue_redis_keys
     should have_imeths :running?
     should have_imeths :start, :stop, :halt
 
-    should "validate its configuration" do
-      assert_true @daemon_class.configuration.valid?
+    should "have validated its config" do
+      assert_true @daemon_class.config.valid?
     end
 
-    should "init Qs" do
+    should "have initialized Qs" do
       assert_true @qs_init_called
     end
 
     should "know its daemon data" do
-      configuration = @daemon_class.configuration
-      data = subject.daemon_data
+      config = @daemon_class.config
+      data   = subject.daemon_data
 
       assert_instance_of Qs::DaemonData, data
-      assert_equal configuration.name,          data.name
-      assert_equal configuration.pid_file,      data.pid_file
-      assert_equal configuration.worker_class,  data.worker_class
-      assert_equal configuration.worker_params, data.worker_params
-      assert_equal configuration.num_workers,   data.num_workers
 
-      assert_equal configuration.verbose_logging,  data.verbose_logging
-      assert_equal configuration.shutdown_timeout, data.shutdown_timeout
-      assert_equal configuration.error_procs,      data.error_procs
+      assert_equal config.name,             data.name
+      assert_equal config.pid_file,         data.pid_file
+      assert_equal config.shutdown_timeout, data.shutdown_timeout
+      assert_equal config.worker_class,     data.worker_class
+      assert_equal config.worker_params,    data.worker_params
+      assert_equal config.num_workers,      data.num_workers
+      assert_equal config.error_procs,      data.error_procs
 
-      assert_equal [@queue.redis_key],   data.queue_redis_keys
-      assert_equal configuration.routes, data.routes.values
+      assert_instance_of config.logger.class, data.logger
 
-      assert_instance_of configuration.logger.class, data.logger
+      assert_equal config.queues.size,     data.queue_redis_keys.size
+      assert_equal config.verbose_logging, data.verbose_logging
+
+      assert_equal config.routes, data.routes.values
     end
 
-    should "know its signal and queues redis keys" do
+    should "know its signals redis keys" do
       data = subject.daemon_data
-      expected = "signals:#{data.name}-#{Socket.gethostname}-#{::Process.pid}"
-      assert_equal expected, subject.signals_redis_key
-      assert_equal data.queue_redis_keys, subject.queue_redis_keys
-    end
-
-    should "know its name, process label and pid file" do
-      data = subject.daemon_data
-      assert_equal data.name,          subject.name
-      assert_equal data.process_label, subject.process_label
-      assert_equal data.pid_file,      subject.pid_file
+      exp = "signals:#{data.name}-#{Socket.gethostname}-#{::Process.pid}"
+      assert_equal exp, subject.signals_redis_key
     end
 
     should "build a client" do
@@ -233,13 +183,14 @@ module Qs::Daemon
       assert_equal exp, @client_spy.redis_config
     end
 
-    should "build a worker pool" do
+    should "build a dat-worker-pool worker pool" do
       data = subject.daemon_data
 
       assert_not_nil @wp_spy
       assert_equal data.worker_class, @wp_spy.worker_class
       assert_equal data.dwp_logger,   @wp_spy.logger
       assert_equal data.num_workers,  @wp_spy.num_workers
+
       exp = data.worker_params.merge({
         :qs_daemon_data      => data,
         :qs_client           => @client_spy,
@@ -248,6 +199,16 @@ module Qs::Daemon
       })
       assert_equal exp, @wp_spy.worker_params
       assert_false @wp_spy.start_called
+    end
+
+    should "demeter its daemon data" do
+      data = subject.daemon_data
+
+      assert_equal data.name,             subject.name
+      assert_equal data.process_label,    subject.process_label
+      assert_equal data.pid_file,         subject.pid_file
+      assert_equal data.logger,           subject.logger
+      assert_equal data.queue_redis_keys, subject.queue_redis_keys
     end
 
     should "not be running by default" do
@@ -511,10 +472,8 @@ module Qs::Daemon
 
   end
 
-  class ConfigurationTests < UnitTests
-    include NsOptions::AssertMacros
-
-    desc "Configuration"
+  class ConfigTests < UnitTests
+    desc "Config"
     setup do
       @queue = Qs::Queue.new do
         name Factory.string
@@ -522,85 +481,111 @@ module Qs::Daemon
         job 'test', 'TestHandler'
       end
 
-      @configuration = Configuration.new.tap do |c|
-        c.name Factory.string
-        c.queues << @queue
-      end
+      @config_class = Config
+      @config = Config.new
+
+      # @configuration = Configuration.new.tap do |c|
+      #   c.name Factory.string
+      #   c.queues << @queue
+      # end
     end
-    subject{ @configuration }
+    subject{ @config }
 
-    should have_options :name, :pid_file
-    should have_options :num_workers
-    should have_options :verbose_logging, :logger
-    should have_options :shutdown_timeout
-    should have_accessors :init_procs, :error_procs
-    should have_accessors :worker_class, :worker_params
-    should have_accessors :queues
-    should have_imeths :routes
-    should have_imeths :to_hash
-    should have_imeths :valid?, :validate!
+    should have_accessors :name, :pid_file, :shutdown_timeout
+    should have_accessors :worker_class, :worker_params, :num_workers
+    should have_accessors :init_procs, :error_procs, :logger, :queues
+    should have_accessors :verbose_logging
+    should have_imeths :routes, :valid?, :validate!
 
-    should "be an ns-options proxy" do
-      assert_includes NsOptions::Proxy, subject.class
+    should "know its default attr values" do
+      assert_equal 4, @config_class::DEFAULT_NUM_WORKERS
     end
 
-    should "default its options and attrs" do
-      config = Configuration.new
-      assert_nil config.name
-      assert_nil config.pid_file
-      assert_equal 4, config.num_workers
-      assert_true config.verbose_logging
-      assert_instance_of Qs::NullLogger, config.logger
+    should "default its attrs" do
+      assert_nil subject.name
+      assert_nil subject.pid_file
       assert_nil subject.shutdown_timeout
 
-      assert_equal [], config.init_procs
-      assert_equal [], config.error_procs
-      assert_equal DefaultWorker, config.worker_class
-      assert_nil config.worker_params
-      assert_equal [], config.queues
-      assert_equal [], config.routes
-    end
+      assert_equal DefaultWorker, subject.worker_class
 
-    should "not be valid by default" do
-      assert_false subject.valid?
+      assert_nil subject.worker_params
+
+      exp = @config_class::DEFAULT_NUM_WORKERS
+      assert_equal exp, subject.num_workers
+
+      assert_equal [], subject.init_procs
+      assert_equal [], subject.error_procs
+
+      assert_instance_of Qs::NullLogger, subject.logger
+
+      assert_equal [],   subject.queues
+      assert_equal true, subject.verbose_logging
     end
 
     should "know its routes" do
-      assert_equal subject.queues.map(&:routes).flatten, subject.routes
+      exp = subject.queues.map(&:routes).flatten
+      assert_equal exp, subject.routes
     end
 
-    should "include some attrs (not just the options) in its hash" do
-      config_hash = subject.to_hash
+    should "not be valid until validate! has been run" do
+      assert_false subject.valid?
 
-      assert_equal subject.error_procs,   config_hash[:error_procs]
-      assert_equal subject.worker_class,  config_hash[:worker_class]
-      assert_equal subject.worker_params, config_hash[:worker_params]
-      assert_equal subject.routes,        config_hash[:routes]
-
-      exp = subject.queues.map(&:redis_key)
-      assert_equal exp, config_hash[:queue_redis_keys]
-    end
-
-    should "call its init procs when validated" do
-      called = false
-      subject.init_procs << proc{ called = true }
-      subject.validate!
-      assert_true called
-    end
-
-    should "ensure its required options have been set when validated" do
-      subject.name = nil
-      assert_raises(InvalidError){ subject.validate! }
       subject.name = Factory.string
-
-      subject.queues = []
-      assert_raises(InvalidError){ subject.validate! }
       subject.queues << @queue
 
-      assert_nothing_raised{ subject.validate! }
+      subject.validate!
+      assert_true subject.valid?
     end
 
-    should "validate its routes when validated" do
+    should "complain if validating and its name is nil or it has no queues" do
+      subject.name = nil
+      subject.queues << @queue
+      assert_raises(InvalidError){ subject.validate! }
+
+      subject.name = Factory.string
+      subject.queues.clear
+      assert_raises(InvalidError){ subject.validate! }
+    end
+
+    should "complain if validating and its worker class isn't a Worker" do
+      subject.name = Factory.string
+      subject.queues << @queue
+
+      subject.worker_class = Module.new
+      assert_raises(InvalidError){ subject.validate! }
+
+      subject.worker_class = Class.new
+      assert_raises(InvalidError){ subject.validate! }
+    end
+
+  end
+
+  class ValidationTests < ConfigTests
+    desc "when successfully validated"
+    setup do
+      @config = Config.new.tap do |c|
+        c.name = Factory.string
+        c.queues << @queue
+      end
+
+      @initialized = false
+      @config.init_procs << proc{ @initialized = true }
+
+      @other_initialized = false
+      @config.init_procs << proc{ @other_initialized = true }
+    end
+
+    should "call its init procs" do
+      assert_equal false, @initialized
+      assert_equal false, @other_initialized
+
+      subject.validate!
+
+      assert_equal true, @initialized
+      assert_equal true, @other_initialized
+    end
+
+    should "validate its routes" do
       subject.routes.each{ |route| assert_nil route.handler_class }
       subject.validate!
       subject.routes.each{ |route| assert_not_nil route.handler_class }
@@ -614,12 +599,6 @@ module Qs::Daemon
       assert_raises(InvalidError){ subject.validate! }
     end
 
-    should "be valid after being validated" do
-      assert_false subject.valid?
-      subject.validate!
-      assert_true subject.valid?
-    end
-
     should "only be able to be validated once" do
       called = 0
       subject.init_procs << proc{ called += 1 }
@@ -627,6 +606,24 @@ module Qs::Daemon
       assert_equal 1, called
       subject.validate!
       assert_equal 1, called
+    end
+
+  end
+
+  class WorkerAvailableTests < UnitTests
+    desc "WorkerAvailable"
+    setup do
+      @worker_available = WorkerAvailable.new
+    end
+    subject{ @worker_available }
+
+    should have_imeths :wait, :signal
+
+    should "allow waiting and signalling" do
+      thread = Thread.new{ subject.wait }
+      assert_equal 'sleep', thread.status
+      subject.signal
+      assert_equal false, thread.status # dead, done running
     end
 
   end
@@ -660,24 +657,6 @@ module Qs::Daemon
       assert_false subject.halt?
       subject.set :halt
       assert_true subject.halt?
-    end
-
-  end
-
-  class WorkerAvailableTests < UnitTests
-    desc "WorkerAvailable"
-    setup do
-      @worker_available = WorkerAvailable.new
-    end
-    subject{ @worker_available }
-
-    should have_imeths :wait, :signal
-
-    should "allow waiting and signalling" do
-      thread = Thread.new{ subject.wait }
-      assert_equal 'sleep', thread.status
-      subject.signal
-      assert_equal false, thread.status # dead, done running
     end
 
   end
