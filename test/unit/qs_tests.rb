@@ -2,7 +2,6 @@ require 'assert'
 require 'qs'
 
 require 'hella-redis/connection_spy'
-require 'ns-options/assert_macros'
 require 'qs/queue'
 
 module Qs
@@ -215,41 +214,29 @@ module Qs
   end
 
   class ConfigTests < UnitTests
-    include NsOptions::AssertMacros
-
     desc "Config"
     setup do
       @config = Config.new
     end
     subject{ @config }
 
-    should have_options :encoder, :decoder, :timeout
-    should have_options :event_publisher
+    should have_accessors :encoder, :decoder, :timeout, :event_publisher
     should have_accessors :dispatcher_queue_class, :dispatcher_queue_name
     should have_accessors :dispatcher_job_name, :dispatcher_job_handler_class_name
     should have_accessors :redis_ip, :redis_port, :redis_db, :redis_ns
     should have_accessors :redis_driver, :redis_timeout, :redis_size, :redis_url
     should have_imeths :redis_connect_hash, :valid?, :validate!
 
-    should "know its default decoder/encoder" do
+    should "know its default attr values" do
       payload = { Factory.string => Factory.string }
 
       exp = JSON.dump(payload)
-      encoded_payload = subject.encoder.call(payload)
-      assert_equal exp, encoded_payload
-      exp = JSON.load(exp)
-      assert_equal exp, subject.decoder.call(encoded_payload)
-    end
+      assert_equal exp, Config::DEFAULT_ENCODER.call(payload)
 
-    should "know its default timeout" do
-      assert_nil subject.timeout
-    end
+      encoded_payload = exp
+      exp = JSON.load(encoded_payload)
+      assert_equal exp, Config::DEFAULT_DECODER.call(encoded_payload)
 
-    should "not have a default event publisher" do
-      assert_nil subject.event_publisher
-    end
-
-    should "know its default attr values" do
       assert_equal Queue,              Config::DEFAULT_DISPATCHER_QUEUE_CLASS
       assert_equal 'dispatcher',       Config::DEFAULT_DISPATCHER_QUEUE_NAME
       assert_equal 'run_dispatch_job', Config::DEFAULT_DISPATCHER_JOB_NAME
@@ -268,6 +255,12 @@ module Qs
 
     should "default its attrs" do
       c = subject.class
+
+      assert_equal c::DEFAULT_ENCODER, subject.encoder
+      assert_equal c::DEFAULT_DECODER, subject.decoder
+
+      assert_nil subject.timeout
+      assert_nil subject.event_publisher
 
       assert_equal c::DEFAULT_DISPATCHER_QUEUE_CLASS, subject.dispatcher_queue_class
       assert_equal c::DEFAULT_DISPATCHER_QUEUE_NAME,  subject.dispatcher_queue_name
