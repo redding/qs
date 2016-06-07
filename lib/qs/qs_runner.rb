@@ -1,4 +1,4 @@
-require 'system_timer'
+require 'much-timeout'
 require 'qs'
 require 'qs/runner'
 
@@ -14,32 +14,23 @@ module Qs
     end
 
     def run
-      OptionalTimeout.new(self.timeout) do
+      MuchTimeout.optional_timeout(self.timeout, TimeoutInterrupt) do
         self.handler.qs_run_callback 'before'
         self.handler.qs_init
         self.handler.qs_run
         self.handler.qs_run_callback 'after'
       end
-    rescue TimeoutError => exception
-      error = TimeoutError.new "#{handler_class} timed out (#{timeout}s)"
+    rescue TimeoutInterrupt => exception
+      error = Qs::TimeoutError.new "#{handler_class} timed out (#{timeout}s)"
       error.set_backtrace(exception.backtrace)
       raise error
     end
 
-    private
-
-    module OptionalTimeout
-      def self.new(timeout, &block)
-        if !timeout.nil?
-          SystemTimer.timeout_after(timeout, TimeoutError, &block)
-        else
-          block.call
-        end
-      end
-    end
+    # this error should never be "swallowed", if it is caught be sure to re-raise
+    # it so the workers will be able to honor their timeout setting.  otherwise
+    # workers will never timeout.
+    TimeoutInterrupt = Class.new(Interrupt)
 
   end
-
-  TimeoutError = Class.new(RuntimeError)
 
 end
