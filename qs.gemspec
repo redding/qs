@@ -24,6 +24,6 @@ Gem::Specification.new do |gem|
   gem.add_dependency("dat-worker-pool", ["~> 0.6.0"])
   gem.add_dependency("hella-redis",     ["~> 0.3.0"])
   gem.add_dependency("much-plugin",     ["~> 0.1.0"])
-  gem.add_dependency("SystemTimer",     ["~> 1.2"])
+  gem.add_dependency("much-timeout",    ["~> 0.1.0"])
 
 end

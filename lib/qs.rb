@@ -189,4 +189,6 @@ module Qs
 
   end
 
+  TimeoutError = Class.new(RuntimeError)
+
 end
