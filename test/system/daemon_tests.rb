@@ -88,7 +88,7 @@ module Qs::Daemon
         'key'   => @key,
         'value' => @value
       })
-      @app_thread.join 0.5
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "run the job" do
@@ -102,7 +102,7 @@ module Qs::Daemon
     setup do
       @error_message = Factory.text
       AppQueue.add('error', 'error_message' => @error_message)
-      @app_thread.join 0.5
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "run the configured error handler procs" do
@@ -116,7 +116,7 @@ module Qs::Daemon
     desc "with a job that times out"
     setup do
       AppQueue.add('timeout')
-      @app_thread.join 1 # let the daemon have time to process the job
+      @app_thread.join(AppHandlers::Timeout::TIMEOUT_TIME + JOIN_SECONDS)
     end
 
     should "run the configured error handler procs" do
@@ -136,7 +136,7 @@ module Qs::Daemon
         'key'   => @key,
         'value' => @value
       })
-      @app_thread.join 0.5
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "run the event" do
@@ -150,7 +150,7 @@ module Qs::Daemon
     setup do
       @error_message = Factory.text
       Qs.publish('qs-app', 'error', 'error_message' => @error_message)
-      @app_thread.join 0.5
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "run the configured error handler procs" do
@@ -164,7 +164,7 @@ module Qs::Daemon
     desc "with an event that times out"
     setup do
       Qs.publish('qs-app', 'timeout')
-      @app_thread.join 1 # let the daemon have time to process the job
+      @app_thread.join(AppHandlers::Timeout::TIMEOUT_TIME + JOIN_SECONDS)
     end
 
     should "run the configured error handler procs" do
@@ -180,16 +180,21 @@ module Qs::Daemon
     desc "without a shutdown timeout"
     setup do
       @app_daemon_class.shutdown_timeout nil # disable shutdown timeout
+      @nil_shutdown_timeout = 10 # something absurdly long, it should be faster
+                                 # than this but want some timout to keep tests
+                                 # from hanging in case it never shuts down
+
       setup_app_and_dispatcher_daemon
 
       AppQueue.add('slow')
       Qs.publish('qs-app', 'slow')
-      @app_thread.join 1 # let the daemon have time to process the job and event
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "shutdown and let the job and event finish" do
       @app_daemon.stop
-      @app_thread.join 10 # give it time to shutdown, should be faster
+      @app_thread.join(@nil_shutdown_timeout)
+
       assert_false @app_thread.alive?
       assert_equal 'finished', Qs.redis.with{ |c| c.get('qs-app:slow') }
       assert_equal 'finished', Qs.redis.with{ |c| c.get('qs-app:slow:event') }
@@ -197,12 +202,15 @@ module Qs::Daemon
 
     should "shutdown and not let the job or event finish" do
       @app_daemon.halt
-      @app_thread.join 2 # give it time to shutdown, should be faster
+      @app_thread.join(@nil_shutdown_timeout)
+
       assert_false @app_thread.alive?
       assert_nil Qs.redis.with{ |c| c.get('qs-app:slow') }
+
       exp = "Qs::ShutdownError"
       assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
       assert_nil Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+
       exp = "Qs::ShutdownError"
       assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
     end
@@ -212,34 +220,41 @@ module Qs::Daemon
   class ShutdownWithTimeoutTests < SystemTests
     desc "with a shutdown timeout"
     setup do
-      @app_daemon_class.shutdown_timeout 1
+      @shutdown_timeout = AppHandlers::Slow::SLOW_TIME * 0.5
+      @app_daemon_class.shutdown_timeout @shutdown_timeout
       setup_app_and_dispatcher_daemon
 
       AppQueue.add('slow')
       Qs.publish('qs-app', 'slow')
-      @app_thread.join 1 # let the daemon have time to process the job and event
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "shutdown and not let the job or event finish" do
       @app_daemon.stop
-      @app_thread.join 2 # give it time to shutdown, should be faster
+      @app_thread.join(@shutdown_timeout + JOIN_SECONDS)
+
       assert_false @app_thread.alive?
       assert_nil Qs.redis.with{ |c| c.get('qs-app:slow') }
+
       exp = "Qs::ShutdownError"
       assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
       assert_nil Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+
       exp = "Qs::ShutdownError"
       assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
     end
 
     should "shutdown and not let the job or event finish" do
       @app_daemon.halt
-      @app_thread.join 2 # give it time to shutdown, should be faster
+      @app_thread.join(@shutdown_timeout + JOIN_SECONDS)
+
       assert_false @app_thread.alive?
       assert_nil Qs.redis.with{ |c| c.get('qs-app:slow') }
+
       exp = "Qs::ShutdownError"
       assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
       assert_nil Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+
       exp = "Qs::ShutdownError"
       assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
     end
@@ -249,34 +264,44 @@ module Qs::Daemon
   class ShutdownWithUnprocessedQueueItemTests < SystemTests
     desc "with a queue item that gets picked up but doesn't get processed"
     setup do
-      Assert.stub(Qs::PayloadHandler, :new){ sleep 5 }
+      Assert.stub(Qs::PayloadHandler, :new) do
+        sleep AppHandlers::Slow::SLOW_TIME + JOIN_SECONDS
+      end
 
-      @app_daemon_class.shutdown_timeout 1
+      @shutdown_timeout = AppHandlers::Slow::SLOW_TIME * 0.5
+      @app_daemon_class.shutdown_timeout @shutdown_timeout
       @app_daemon_class.workers 2
       setup_app_and_dispatcher_daemon
 
-      AppQueue.add('slow')
-      AppQueue.add('slow')
-      AppQueue.add('basic')
-      @app_thread.join 1 # let the daemon have time to process jobs
+      AppQueue.add('slow1')
+      AppQueue.add('slow2')
+      AppQueue.add('basic1')
+
+      @app_thread.join(JOIN_SECONDS)
     end
 
     should "shutdown and requeue the queue item" do
       @app_daemon.stop
-      @app_thread.join 2 # give it time to shutdown, should be faster
+      @app_thread.join(@shutdown_timeout + JOIN_SECONDS)
+
       assert_false @app_thread.alive?
+
       encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
       names = encoded_payloads.map{ |sp| Qs::Payload.deserialize(sp).name }
-      assert_equal ['basic', 'slow', 'slow'], names
+
+      ['slow1', 'slow2', 'basic1'].each{ |n| assert_includes n, names }
     end
 
     should "shutdown and requeue the queue item" do
       @app_daemon.halt
-      @app_thread.join 2 # give it time to shutdown, should be faster
+      @app_thread.join(@shutdown_timeout + JOIN_SECONDS)
+
       assert_false @app_thread.alive?
-      encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
+
+      encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 4) }
       names = encoded_payloads.map{ |sp| Qs::Payload.deserialize(sp).name }
-      assert_equal ['basic', 'slow', 'slow'], names
+
+      ['slow1', 'slow2', 'basic1'].each{ |n| assert_includes n, names }
     end
 
   end
@@ -329,7 +354,11 @@ module Qs::Daemon
 
     def start
       @app_thread = @app_daemon.start
-      @dispatcher_thread = @dispatcher_daemon.start if @dispatcher_daemon
+      @app_thread.join(JOIN_SECONDS)
+      if @dispatcher_daemon
+        @dispatcher_thread = @dispatcher_daemon.start
+        @dispatcher_thread.join(JOIN_SECONDS)
+      end
       @app_thread
     end
 

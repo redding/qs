@@ -221,7 +221,7 @@ module Qs::Daemon
     desc "and started"
     setup do
       @thread = @daemon.start
-      @thread.join 0.1
+      @thread.join(JOIN_SECONDS)
     end
 
     should "ping redis" do
@@ -257,14 +257,14 @@ module Qs::Daemon
 
       @daemon = @daemon_class.new
       @thread = @daemon.start
+      @thread.join(JOIN_SECONDS)
     end
     subject{ @daemon }
 
     should "sleep its thread and not add work to its worker pool" do
-      @thread.join(0.1)
       assert_equal 'sleep', @thread.status
       @client_spy.append(@queue.redis_key, Factory.string)
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
       assert_empty @wp_spy.work_items
     end
 
@@ -275,17 +275,21 @@ module Qs::Daemon
     setup do
       @daemon = @daemon_class.new
       @thread = @daemon.start
+      @thread.join(JOIN_SECONDS)
 
       @encoded_payload = Factory.string
       @client_spy.append(@queue.redis_key, @encoded_payload)
+      @thread.join(JOIN_SECONDS)
     end
     subject{ @daemon }
 
     should "call dequeue on its client and add work to the worker pool" do
       call = @client_spy.calls.last
       assert_equal :block_dequeue, call.command
+
       exp = [subject.signals_redis_key, subject.queue_redis_keys, 0].flatten
       assert_equal exp, call.args
+
       exp = Qs::QueueItem.new(@queue.redis_key, @encoded_payload)
       assert_equal exp, @wp_spy.work_items.first
     end
@@ -295,25 +299,35 @@ module Qs::Daemon
   class RunningWithErrorWhileDequeuingTests < InitSetupTests
     desc "running with an error while dequeueing"
     setup do
-      @daemon = @daemon_class.new
-      @thread = @daemon.start
+      @mutex    = Mutex.new
+      @cond_var = ConditionVariable.new
+      @daemon   = @daemon_class.new
 
       @block_dequeue_calls = 0
       Assert.stub(@client_spy, :block_dequeue) do
         @block_dequeue_calls += 1
+        @mutex.synchronize{ @cond_var.wait(@mutex) }
         raise RuntimeError
       end
-      # cause the daemon to loop, its sleeping on the original block_dequeue
-      # call that happened before the stub
-      @client_spy.append(@queue.redis_key, Factory.string)
-      @thread.join(0.1)
+
+      @thread = @daemon.start
+      @thread.join(JOIN_SECONDS)
+    end
+    teardown do
+      Assert.unstub(@client_spy, :block_dequeue)
+      @mutex.synchronize{ @cond_var.broadcast }
     end
     subject{ @daemon }
 
     should "not cause the thread to exit" do
       assert_true @thread.alive?
       assert_equal 1, @block_dequeue_calls
-      @thread.join(1)
+
+      # the daemon is sleeping on the original block_dequeue, cause it to
+      # dequeue (and error)
+      @mutex.synchronize{ @cond_var.broadcast }
+      @thread.join(Qs::Daemon::FETCH_ERR_SLEEP_TIME + JOIN_SECONDS)
+
       assert_true @thread.alive?
       assert_equal 2, @block_dequeue_calls
     end
@@ -331,6 +345,7 @@ module Qs::Daemon
       Assert.stub(@daemon.queue_redis_keys, :shuffle){ @shuffled_keys }
 
       @thread = @daemon.start
+      @thread.join(JOIN_SECONDS)
     end
     subject{ @daemon }
 
@@ -380,6 +395,7 @@ module Qs::Daemon
       @wp_worker_available = false
       @daemon = @daemon_class.new
       @thread = @daemon.start
+      @thread.join(JOIN_SECONDS)
       @daemon.stop(true)
     end
     subject{ @daemon }
@@ -427,6 +443,7 @@ module Qs::Daemon
       @wp_worker_available = false
       @daemon = @daemon_class.new
       @thread = @daemon.start
+      @thread.join(JOIN_SECONDS)
       @daemon.halt(true)
     end
     subject{ @daemon }
@@ -447,7 +464,7 @@ module Qs::Daemon
       # call that happened before the stub
       @queue_item = Qs::QueueItem.new(@queue.redis_key, Factory.string)
       @client_spy.append(@queue_item.queue_redis_key, @queue_item.encoded_payload)
-      @thread.join
+      @thread.join(JOIN_SECONDS)
     end
 
     should "shutdown the worker pool" do
@@ -616,8 +633,11 @@ module Qs::Daemon
 
     should "allow waiting and signalling" do
       thread = Thread.new{ subject.wait }
+      thread.join(JOIN_SECONDS)
       assert_equal 'sleep', thread.status
+
       subject.signal
+      thread.join(JOIN_SECONDS)
       assert_equal false, thread.status # dead, done running
     end
 

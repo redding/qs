@@ -1,6 +1,5 @@
 require 'dat-worker-pool'
 require 'much-plugin'
-require 'system_timer'
 require 'thread'
 require 'qs'
 require 'qs/client'
@@ -14,7 +13,8 @@ module Qs
   module Daemon
     include MuchPlugin
 
-    SIGNAL = '.'.freeze
+    SIGNAL               = '.'.freeze
+    FETCH_ERR_SLEEP_TIME = 1.0.freeze
 
     plugin_included do
       extend ClassMethods
@@ -166,7 +166,7 @@ module Qs
           log "Error occurred while dequeueing", :error
           log "#{exception.class}: #{exception.message}", :error
           (exception.backtrace || []).each{ |l| log(l, :error) }
-          sleep 1
+          sleep FETCH_ERR_SLEEP_TIME
         end
       end
 

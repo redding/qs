@@ -6,9 +6,12 @@ AppQueue = Qs::Queue.new do
   job_handler_ns 'AppHandlers'
 
   job 'basic',   'Basic'
+  job 'basic1',  'Basic'
   job 'error',   'Error'
   job 'timeout', 'Timeout'
   job 'slow',    'Slow'
+  job 'slow1',   'Slow'
+  job 'slow2',   'Slow'
 
   event_handler_ns 'AppHandlers'
 
@@ -39,18 +42,22 @@ module AppHandlers
   class Timeout
     include Qs::JobHandler
 
-    timeout 0.2
+    TIMEOUT_TIME = 0.1
+
+    timeout TIMEOUT_TIME
 
     def run!
-      sleep 2
+      sleep 2*TIMEOUT_TIME
     end
   end
 
   class Slow
     include Qs::JobHandler
 
+    SLOW_TIME = 1
+
     def run!
-      sleep 5
+      sleep SLOW_TIME
       Qs.redis.with{ |c| c.set('qs-app:slow', 'finished') }
     end
   end
@@ -74,18 +81,22 @@ module AppHandlers
   class TimeoutEvent
     include Qs::EventHandler
 
-    timeout 0.2
+    TIMEOUT_TIME = 0.1
+
+    timeout TIMEOUT_TIME
 
     def run!
-      sleep 2
+      sleep 2*TIMEOUT_TIME
     end
   end
 
   class SlowEvent
     include Qs::EventHandler
 
+    SLOW_TIME = 1
+
     def run!
-      sleep 5
+      sleep SLOW_TIME
       Qs.redis.with{ |c| c.set('qs-app:slow:event', 'finished') }
     end
   end
