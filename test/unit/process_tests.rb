@@ -2,6 +2,7 @@ require 'assert'
 require 'qs/process'
 
 require 'qs/daemon'
+require 'qs/io_pipe'
 require 'test/support/pid_file_spy'
 
 class Qs::Process
@@ -15,6 +16,12 @@ class Qs::Process
 
     should "know its wait for signals timeout" do
       assert_equal 15, WAIT_FOR_SIGNALS_TIMEOUT
+    end
+
+    should "know its signal strings" do
+      assert_equal 'H', HALT
+      assert_equal 'S', STOP
+      assert_equal 'R', RESTART
     end
 
   end
@@ -51,7 +58,9 @@ class Qs::Process
     end
 
     should "know its name, pid file, signal io and restart cmd" do
-      assert_equal "qs: #{@daemon_spy.process_label}", subject.name
+      exp = "qs: #{@daemon_spy.process_label}"
+      assert_equal exp, subject.name
+
       assert_equal @pid_file_spy, subject.pid_file
       assert_instance_of Qs::IOPipe, subject.signal_io
       assert_equal @restart_cmd_spy, subject.restart_cmd

@@ -51,17 +51,15 @@ module Qs
       @pid_file.remove
     end
 
-    def daemonize?
-      @daemonize
-    end
+    def daemonize?; @daemonize; end
 
     private
 
     def start_daemon(daemon)
-      @daemon.start
-      log "#{@daemon.name} daemon started and ready."
+      daemon.start
+      log "#{daemon.name} daemon started and ready."
     rescue StandardError => exception
-      log "#{@daemon.name} daemon never started."
+      log "#{daemon.name} daemon never started."
       raise exception
     end
 
