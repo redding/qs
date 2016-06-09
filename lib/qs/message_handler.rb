@@ -50,6 +50,7 @@ module Qs
 
       def logger; @qs_runner.logger; end
       def params; @qs_runner.params; end
+      def halt;   @qs_runner.halt;   end
 
     end
 

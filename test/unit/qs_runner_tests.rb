@@ -89,6 +89,112 @@ class Qs::QsRunner
 
   end
 
+  class RunWithInitHaltTests < UnitTests
+    desc "with a handler that halts on init"
+    setup do
+      @runner = @runner_class.new(@handler_class, :params => {
+        'halt' => 'init'
+      })
+      @handler  = @runner.handler
+      @response = @runner.run
+    end
+    subject{ @runner }
+
+    should "run the before and after callbacks despite the halt" do
+      assert_not_nil @handler.first_before_call_order
+      assert_not_nil @handler.second_before_call_order
+      assert_not_nil @handler.first_after_call_order
+      assert_not_nil @handler.second_after_call_order
+    end
+
+    should "stop processing when the halt is called" do
+      assert_not_nil @handler.init_call_order
+      assert_nil @handler.run_call_order
+    end
+
+  end
+
+  class RunWithRunHaltTests < UnitTests
+    desc "when run with a handler that halts on run"
+    setup do
+      @runner = @runner_class.new(@handler_class, :params => {
+        'halt' => 'run'
+      })
+      @handler  = @runner.handler
+      @response = @runner.run
+    end
+    subject{ @runner }
+
+    should "run the before and after callbacks despite the halt" do
+      assert_not_nil @handler.first_before_call_order
+      assert_not_nil @handler.second_before_call_order
+      assert_not_nil @handler.first_after_call_order
+      assert_not_nil @handler.second_after_call_order
+    end
+
+    should "stop processing when the halt is called" do
+      assert_not_nil @handler.init_call_order
+      assert_not_nil @handler.run_call_order
+    end
+
+  end
+
+  class RunWithBeforeHaltTests < UnitTests
+    desc "when run with a handler that halts in an after callback"
+    setup do
+      @runner = @runner_class.new(@handler_class, :params => {
+        'halt' => 'before'
+      })
+      @handler  = @runner.handler
+      @response = @runner.run
+    end
+    subject{ @runner }
+
+    should "stop processing when the halt is called" do
+      assert_not_nil @handler.first_before_call_order
+      assert_nil @handler.second_before_call_order
+    end
+
+    should "not run the after callbacks b/c of the halt" do
+      assert_nil @handler.first_after_call_order
+      assert_nil @handler.second_after_call_order
+    end
+
+    should "not run the handler's init and run b/c of the halt" do
+      assert_nil @handler.init_call_order
+      assert_nil @handler.run_call_order
+    end
+
+  end
+
+  class RunWithAfterHaltTests < UnitTests
+    desc "when run with a handler that halts in an after callback"
+    setup do
+      @runner = @runner_class.new(@handler_class, :params => {
+        'halt' => 'after'
+      })
+      @handler  = @runner.handler
+      @response = @runner.run
+    end
+    subject{ @runner }
+
+    should "run the before callback despite the halt" do
+      assert_not_nil @handler.first_before_call_order
+      assert_not_nil @handler.second_before_call_order
+    end
+
+    should "run the handler's init and run despite the halt" do
+      assert_not_nil @handler.init_call_order
+      assert_not_nil @handler.run_call_order
+    end
+
+    should "stop processing when the halt is called" do
+      assert_not_nil @handler.first_after_call_order
+      assert_nil @handler.second_after_call_order
+    end
+
+  end
+
   class RunWithTimeoutInterruptTests < RunSetupTests
     setup do
       Assert.stub(MuchTimeout, :optional_timeout){ raise TimeoutInterrupt }
@@ -115,23 +221,29 @@ class Qs::QsRunner
 
     timeout Factory.integer
 
-    before{ @first_before_call_order = next_call_order }
+    before{ @first_before_call_order = next_call_order; halt_if('before') }
     before{ @second_before_call_order = next_call_order }
 
-    after{ @first_after_call_order = next_call_order }
+    after{ @first_after_call_order = next_call_order; halt_if('after') }
     after{ @second_after_call_order = next_call_order }
 
     def init!
       @init_call_order = next_call_order
+      halt_if('init')
     end
 
     def run!
       @run_call_order = next_call_order
+      halt_if('run')
     end
 
     private
 
     def next_call_order; @order ||= 0; @order += 1; end
+
+    def halt_if(value)
+      halt if params['halt'] == value
+    end
 
   end
 

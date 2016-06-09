@@ -21,6 +21,10 @@ module Qs
       raise NotImplementedError
     end
 
+    def halt
+      throw :halt
+    end
+
   end
 
 end

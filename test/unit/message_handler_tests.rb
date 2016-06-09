@@ -236,10 +236,23 @@ module Qs::MessageHandler
       assert_equal @runner.params, subject.instance_eval{ params }
     end
 
+    should "call to the runner for its halt helper" do
+      capture_runner_meth_args_for(:halt)
+      subject.instance_eval{ halt }
+
+      assert_equal [], @meth_args
+    end
+
     private
 
     def stub_runner_with_something_for(meth)
       Assert.stub(@runner, meth){ @something }
+    end
+
+    def capture_runner_meth_args_for(meth)
+      Assert.stub(@runner, meth) do |*args|
+        @meth_args = args
+      end
     end
 
   end
