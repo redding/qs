@@ -25,7 +25,7 @@ class Qs::Runner
 
     should have_readers :handler_class, :handler
     should have_readers :logger, :message, :params
-    should have_imeths :run
+    should have_imeths :run, :halt
 
     should "know its handler class and handler" do
       assert_equal @handler_class, subject.handler_class
@@ -54,6 +54,14 @@ class Qs::Runner
 
     should "not implement its run method" do
       assert_raises(NotImplementedError){ subject.run }
+    end
+
+    should "halt execution with its halt method" do
+      something = nil
+      @runner_class.new(@handler_class).tap do |runner|
+        catch(:halt){ runner.halt; something = Factory.string }
+      end
+      assert_nil something
     end
 
   end

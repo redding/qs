@@ -17,11 +17,21 @@ module Qs
       })
       a.each{ |key, value| self.handler.send("#{key}=", value) }
 
-      self.handler.qs_init
+      @halted = false
+      catch(:halt){ self.handler.qs_init }
     end
 
+    def halted?; @halted; end
+
     def run
-      self.handler.qs_run
+      catch(:halt){ self.handler.qs_run } if !self.halted?
+    end
+
+    # helpers
+
+    def halt
+      @halted = true
+      super
     end
 
     private

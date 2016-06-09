@@ -15,10 +15,11 @@ module Qs
 
     def run
       MuchTimeout.optional_timeout(self.timeout, TimeoutInterrupt) do
-        self.handler.qs_run_callback 'before'
-        self.handler.qs_init
-        self.handler.qs_run
-        self.handler.qs_run_callback 'after'
+        catch(:halt) do
+          self.handler.qs_run_callback 'before'
+          catch(:halt){ self.handler.qs_init; self.handler.qs_run }
+          self.handler.qs_run_callback 'after'
+        end
       end
     rescue TimeoutInterrupt => exception
       error = Qs::TimeoutError.new "#{handler_class} timed out (#{timeout}s)"

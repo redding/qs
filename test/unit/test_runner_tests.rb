@@ -39,7 +39,7 @@ class Qs::TestRunner
     end
     subject{ @runner }
 
-    should have_imeths :run
+    should have_imeths :halted?, :run
 
     should "know its standard args" do
       assert_equal @args[:logger],  subject.logger
@@ -69,6 +69,17 @@ class Qs::TestRunner
 
     should "not call its handler's after callbacks" do
       assert_nil @handler.after_called
+    end
+
+    should "not be halted by default" do
+      assert_false subject.halted?
+    end
+
+    should "not call `run` on its handler if halted when run" do
+      catch(:halt){ subject.halt }
+      assert_true subject.halted?
+      subject.run
+      assert_nil @handler.run_called
     end
 
     should "stringify and encode the params passed to it" do
