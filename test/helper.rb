@@ -12,3 +12,14 @@ ROOT_PATH = Pathname.new(File.expand_path('../..', __FILE__))
 require 'test/support/factory'
 
 require 'json' # so the default encoder/decoder procs will work
+
+JOIN_SECONDS = 0.1
+
+# 1.8.7 backfills
+
+# Array#sample
+if !(a = Array.new).respond_to?(:sample) && a.respond_to?(:choice)
+  class Array
+    alias_method :sample, :choice
+  end
+end

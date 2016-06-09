@@ -109,12 +109,12 @@ class Qs::Process
       @wait_timeout = nil
       Assert.stub(@process.signal_io, :wait) do |timeout|
         @wait_timeout = timeout
-        sleep 0.1
+        sleep 2*JOIN_SECONDS
         false
       end
 
       @thread = Thread.new{ @process.run }
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
     teardown do
       # manually unstub or the process thread will hang forever
@@ -177,7 +177,7 @@ class Qs::Process
     setup do
       Assert.stub(@process, :daemonize?){ true }
       @thread = Thread.new{ @process.run }
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
 
     should "daemonize the process" do
@@ -190,8 +190,9 @@ class Qs::Process
     desc "and run with a halt signal"
     setup do
       @thread = Thread.new{ @process.run }
+      @thread.join(JOIN_SECONDS)
       @process.signal_io.write(HALT)
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
 
     should "halt its daemon" do
@@ -217,8 +218,9 @@ class Qs::Process
     desc "and run with a stop signal"
     setup do
       @thread = Thread.new{ @process.run }
+      @thread.join(JOIN_SECONDS)
       @process.signal_io.write(STOP)
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
 
     should "stop its daemon" do
@@ -244,8 +246,9 @@ class Qs::Process
     desc "and run with a restart signal"
     setup do
       @thread = Thread.new{ @process.run }
+      @thread.join(JOIN_SECONDS)
       @process.signal_io.write(RESTART)
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
 
     should "stop its daemon" do
@@ -266,15 +269,16 @@ class Qs::Process
   class RunWithDaemonCrashTests < RunSetupTests
     desc "and run with the daemon crashing"
     setup do
-      # lower the time it sleeps so it loops and restarts the daemon quicker
       Assert.stub(@process.signal_io, :wait) do |timeout|
-        sleep 0.1
+        sleep JOIN_SECONDS * 0.5 # ensure this has time to run before the thread
+                                 # joins below
         false
       end
 
       @thread = Thread.new{ @process.run }
+      @thread.join(JOIN_SECONDS)
       @daemon_spy.start_called = false
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
     teardown do
       # manually unstub or the process thread will hang forever
@@ -294,7 +298,7 @@ class Qs::Process
       Assert.stub(::Signal, :trap){ raise ArgumentError }
 
       @thread = Thread.new{ @process.run }
-      @thread.join(0.1)
+      @thread.join(JOIN_SECONDS)
     end
 
     should "start normally" do

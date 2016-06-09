@@ -96,7 +96,7 @@ class Qs::DaemonData
     end
 
     should "look up a route using `route_for`" do
-      exp_route = @routes.choice
+      exp_route = @routes.sample
       assert_equal exp_route, subject.route_for(exp_route.id)
     end
 

@@ -16,7 +16,7 @@ module Factory
   end
 
   def self.message(params = nil)
-    self.send([:job, :event].choice, params)
+    self.send([:job, :event].sample, params)
   end
 
   def self.job(args = nil)
