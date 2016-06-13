@@ -38,8 +38,11 @@ module Qs
       assert_same subject.config, yielded
     end
 
-    should "not have a client or redis connection by default" do
-      assert_nil subject.client
+    should "have a null client by default" do
+      assert_instance_of NullClient, subject.client
+    end
+
+    should "not have a redis connection by default" do
       assert_nil subject.redis
     end
 
@@ -205,8 +208,8 @@ module Qs
 
       assert_false subject.config.valid?
       assert_nil subject.dispatcher_queue
-      assert_nil subject.client
       assert_nil subject.redis
+      assert_instance_of NullClient, subject.client
       assert_raises(NoMethodError){ subject.encode(Factory.integer) }
       assert_raises(NoMethodError){ subject.decode(Factory.integer) }
     end
@@ -343,6 +346,49 @@ module Qs
       assert_nil subject.new(nil, Factory.integer, Factory.integer)
       assert_nil subject.new(Factory.string, nil, Factory.integer)
       assert_nil subject.new(Factory.string, Factory.integer, nil)
+    end
+
+  end
+
+  class NullClientTests < UnitTests
+    desc "NullClient"
+    setup do
+      @null_client = NullClient.new
+    end
+    subject{ @null_client }
+
+    should have_imeths :enqueue, :publish, :publish_as, :push
+    should have_imeths :sync_subscriptions, :clear_subscriptions
+    should have_imeths :event_subscribers
+
+    should "raise uninitialized errors" do
+      queue      = Qs::Queue.new{ name Factory.string }
+      job_name   = Factory.string
+      job_params = { Factory.string => Factory.string }
+      assert_raises(UninitializedError) do
+        subject.enqueue(queue, job_name, job_params)
+      end
+
+      event_channel = Factory.string
+      event_name    = Factory.string
+      event_params  = { Factory.string => Factory.string }
+      assert_raises(UninitializedError) do
+        subject.publish(event_channel, event_name, event_params)
+      end
+
+      event_publisher = Factory.string
+      assert_raises(UninitializedError) do
+        subject.publish_as(event_publisher, event_channel, event_name, event_params)
+      end
+
+      payload = { Factory.string => Factory.string }
+      assert_raises(UninitializedError){ subject.push(queue.name, payload) }
+
+      assert_raises(UninitializedError){ subject.sync_subscriptions(queue) }
+      assert_raises(UninitializedError){ subject.clear_subscriptions(queue) }
+
+      event = Factory.event
+      assert_raises(UninitializedError){ subject.event_subscribers(event) }
     end
 
   end

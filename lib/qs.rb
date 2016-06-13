@@ -41,19 +41,19 @@ module Qs
   end
 
   def self.enqueue(queue, job_name, params = nil)
-    @client.enqueue(queue, job_name, params)
+    self.client.enqueue(queue, job_name, params)
   end
 
   def self.publish(channel, name, params = nil)
-    @client.publish(channel, name, params)
+    self.client.publish(channel, name, params)
   end
 
   def self.publish_as(publisher, channel, name, params = nil)
-    @client.publish_as(publisher, channel, name, params)
+    self.client.publish_as(publisher, channel, name, params)
   end
 
   def self.push(queue_name, payload)
-    @client.push(queue_name, payload)
+    self.client.push(queue_name, payload)
   end
 
   def self.encode(payload)
@@ -77,7 +77,7 @@ module Qs
   end
 
   def self.client
-    @client
+    @client || NullClient.new
   end
 
   def self.redis
@@ -189,6 +189,21 @@ module Qs
 
   end
 
-  TimeoutError = Class.new(RuntimeError)
+  class NullClient
+    def initialize
+      @error = UninitializedError.new("Qs hasn't been initialized")
+    end
+
+    def enqueue(*args);             raise @error; end
+    def publish(*args);             raise @error; end
+    def publish_as(*args);          raise @error; end
+    def push(*args);                raise @error; end
+    def sync_subscriptions(*args);  raise @error; end
+    def clear_subscriptions(*args); raise @error; end
+    def event_subscribers(*args);   raise @error; end
+  end
+
+  UninitializedError = Class.new(RuntimeError)
+  TimeoutError       = Class.new(RuntimeError)
 
 end
