@@ -100,7 +100,6 @@ module Qs
 
     def run_restart_cmd(daemon, restart_cmd)
       log "Restarting #{daemon.name} daemon"
-      ENV['QS_SKIP_DAEMONIZE'] = 'yes'
       restart_cmd.run
     end
 
@@ -124,9 +123,22 @@ module Qs
       @argv = [Gem.ruby, $0, ARGV.dup].flatten
     end
 
-    def run
-      Dir.chdir self.dir
-      Kernel.exec(*self.argv)
+    if RUBY_VERSION == '1.8.7'
+
+      def run
+        ENV['QS_SKIP_DAEMONIZE'] = 'yes'
+        Dir.chdir self.dir
+        Kernel.exec(*self.argv)
+      end
+
+    else
+
+      def run
+        env     = { 'QS_SKIP_DAEMONIZE' => 'yes' }
+        options = { :chdir => self.dir }
+        Kernel.exec(*([env] + self.argv + [options]))
+      end
+
     end
 
     private

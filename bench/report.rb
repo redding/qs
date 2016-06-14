@@ -1,3 +1,5 @@
+$LOAD_PATH.push(File.expand_path('../..', __FILE__))
+
 require 'benchmark'
 require 'scmd'
 require 'bench/setup'

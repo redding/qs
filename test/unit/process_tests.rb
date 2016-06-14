@@ -10,7 +10,13 @@ class Qs::Process
   class UnitTests < Assert::Context
     desc "Qs::Process"
     setup do
+      @current_env_skip_daemonize = ENV['QS_SKIP_DAEMONIZE']
+      ENV.delete('QS_SKIP_DAEMONIZE')
+
       @process_class = Qs::Process
+    end
+    teardown do
+      ENV['QS_SKIP_DAEMONIZE'] = @current_env_skip_daemonize
     end
     subject{ @process_class }
 
@@ -29,9 +35,6 @@ class Qs::Process
   class InitTests < UnitTests
     desc "when init"
     setup do
-      @current_env_skip_daemonize = ENV['QS_SKIP_DAEMONIZE']
-      ENV.delete('QS_SKIP_DAEMONIZE')
-
       @daemon_spy = DaemonSpy.new
 
       @pid_file_spy = PIDFileSpy.new(Factory.integer)
@@ -43,9 +46,6 @@ class Qs::Process
       Assert.stub(Qs::RestartCmd, :new){ @restart_cmd_spy }
 
       @process = @process_class.new(@daemon_spy)
-    end
-    teardown do
-      ENV['QS_SKIP_DAEMONIZE'] = @current_env_skip_daemonize
     end
     subject{ @process }
 
@@ -265,10 +265,6 @@ class Qs::Process
       assert_equal [true], @daemon_spy.stop_args
     end
 
-    should "set the env var to skip daemonize" do
-      assert_equal 'yes', ENV['QS_SKIP_DAEMONIZE']
-    end
-
     should "run the restart cmd" do
       assert_true @restart_cmd_spy.run_called
     end
@@ -356,10 +352,26 @@ class Qs::Process
       assert_equal [Gem.ruby, $0, ARGV].flatten, subject.argv
     end
 
-    should "change the dir and run a kernel exec when run" do
-      subject.run
-      assert_equal [subject.dir], @chdir_called_with
-      assert_equal subject.argv,  @exec_called_with
+    if RUBY_VERSION == '1.8.7'
+
+      should "set env vars, change the dir and kernel exec when run" do
+        subject.run
+
+        assert_equal 'yes', ENV['QS_SKIP_DAEMONIZE']
+        assert_equal [subject.dir], @chdir_called_with
+        assert_equal subject.argv,  @exec_called_with
+      end
+
+    else
+
+      should "kernel exec when run" do
+        subject.run
+
+        env     = { 'QS_SKIP_DAEMONIZE' => 'yes' }
+        options = { :chdir => subject.dir }
+        assert_equal ([env] + subject.argv + [options]), @exec_called_with
+      end
+
     end
 
   end
