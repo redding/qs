@@ -252,7 +252,7 @@ module Qs
       end
 
       def queues
-        self.configuration.queues
+        self.config.queues
       end
 
       # flags

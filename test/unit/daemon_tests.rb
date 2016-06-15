@@ -82,6 +82,13 @@ module Qs::Daemon
       assert_equal exp, config.verbose_logging
     end
 
+    should "know its queues" do
+      assert_equal [], subject.queues
+      exp = Factory.string
+      subject.queue(exp)
+      assert_equal [exp], subject.queues
+    end
+
   end
 
   class InitSetupTests < UnitTests
