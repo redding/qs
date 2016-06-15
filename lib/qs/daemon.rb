@@ -238,8 +238,16 @@ module Qs
         self.config.init_procs << block
       end
 
+      def init_procs
+        self.config.init_procs
+      end
+
       def error(&block)
         self.config.error_procs << block
+      end
+
+      def error_procs
+        self.config.error_procs
       end
 
       def logger(value = nil)
