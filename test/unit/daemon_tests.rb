@@ -22,7 +22,8 @@ module Qs::Daemon
     should have_imeths :config
     should have_imeths :name, :pid_file, :shutdown_timeout
     should have_imeths :worker_class, :worker_params, :num_workers, :workers
-    should have_imeths :init, :error, :logger, :queue, :queues
+    should have_imeths :init, :init_procs, :error, :error_procs
+    should have_imeths :logger, :queue, :queues
     should have_imeths :verbose_logging
 
     should "use much-plugin" do
@@ -57,13 +58,13 @@ module Qs::Daemon
       assert_equal exp, subject.config.num_workers
       assert_equal exp, subject.workers
 
-      exp = proc{ }
+      exp = proc{ Factory.string }
       assert_equal 0, config.init_procs.size
       subject.init(&exp)
       assert_equal 1, config.init_procs.size
       assert_equal exp, config.init_procs.first
 
-      exp = proc{ }
+      exp = proc{ Factory.string }
       assert_equal 0, config.error_procs.size
       subject.error(&exp)
       assert_equal 1, config.error_procs.size
@@ -80,6 +81,11 @@ module Qs::Daemon
       exp = Factory.boolean
       subject.verbose_logging exp
       assert_equal exp, config.verbose_logging
+    end
+
+    should "demeter its config values that aren't directly set" do
+      assert_equal subject.config.init_procs,  subject.init_procs
+      assert_equal subject.config.error_procs, subject.error_procs
     end
 
     should "know its queues" do
