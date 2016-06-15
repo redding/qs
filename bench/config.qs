@@ -1,3 +1,4 @@
+$LOAD_PATH.push(File.expand_path('../..', __FILE__))
 require 'qs'
 
 ENV['LOG_NAME'] = 'log/bench_daemon.log'
