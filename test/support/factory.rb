@@ -1,5 +1,6 @@
 require 'assert/factory'
 require 'qs/dispatch_job'
+require 'qs/error_handler'
 require 'qs/job'
 require 'qs/event'
 
@@ -13,6 +14,10 @@ module Factory
     begin; raise(klass, message); rescue klass => exception; end
     exception.set_backtrace(nil) if Factory.boolean
     exception
+  end
+
+  def self.qs_std_error(message = nil)
+    self.exception(Qs::ErrorHandler::STANDARD_ERROR_CLASSES.sample, message)
   end
 
   def self.message(params = nil)
