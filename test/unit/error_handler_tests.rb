@@ -9,7 +9,7 @@ class Qs::ErrorHandler
   class UnitTests < Assert::Context
     desc "Qs::ErrorHandler"
     setup do
-      @exception       = Factory.exception
+      @exception       = Factory.qs_std_error
       @daemon_data     = Qs::DaemonData.new
       @queue_redis_key = Qs::Queue::RedisKey.new(Factory.string)
       @context_hash    = {
@@ -23,6 +23,11 @@ class Qs::ErrorHandler
       @handler_class = Qs::ErrorHandler
     end
     subject{ @handler_class }
+
+    should "know its standard error classes" do
+      exp = DatWorkerPool::Worker::STANDARD_ERROR_CLASSES
+      assert_equal exp, subject::STANDARD_ERROR_CLASSES
+    end
 
   end
 
@@ -79,7 +84,7 @@ class Qs::ErrorHandler
     desc "and run with error procs that throw exceptions"
     setup do
       @proc_exceptions = @error_proc_spies.reverse.map do |spy|
-        exception = Factory.exception(RuntimeError, @error_proc_spies.index(spy).to_s)
+        exception = Factory.qs_std_error(@error_proc_spies.index(spy).to_s)
         spy.raise_exception = exception
         exception
       end

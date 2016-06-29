@@ -77,7 +77,7 @@ class Qs::PayloadHandler
 
   class RunWithExceptionSetupTests < InitTests
     setup do
-      @route_exception = Factory.exception
+      @route_exception = Factory.qs_std_error
       Assert.stub(@route_spy, :run){ raise @route_exception }
       Assert.stub(Qs::ErrorHandler, :new) do |*args|
         @error_handler_spy = ErrorHandlerSpy.new(*args)
@@ -186,7 +186,7 @@ class Qs::PayloadHandler
   class LoggingJobErrorTests < LoggingJobSetupTests
     desc "that errors while being processed"
     setup do
-      @route_exception = Factory.exception
+      @route_exception = Factory.qs_std_error
       Assert.stub(@route_spy, :run){ raise @route_exception }
 
       @payload_handler.run
@@ -260,7 +260,7 @@ class Qs::PayloadHandler
   class LoggingEventErrorTests < LoggingEventSetupTests
     desc "that errors while being processed"
     setup do
-      @route_exception = Factory.exception
+      @route_exception = Factory.qs_std_error
       Assert.stub(@route_spy, :run){ raise @route_exception }
 
       @payload_handler.run
@@ -294,7 +294,7 @@ class Qs::PayloadHandler
       @message = Factory.message
       setup_for_message(@message)
 
-      Assert.stub(Qs::Payload, :deserialize){ raise Factory.exception }
+      Assert.stub(Qs::Payload, :deserialize){ raise Factory.qs_std_error }
 
       @payload_handler = @handler_class.new(@daemon_data, @queue_item)
       @payload_handler.run
@@ -430,7 +430,7 @@ class Qs::PayloadHandler
     def initialize(exception, context_hash)
       @passed_exception = exception
       @context_hash     = context_hash
-      @exception        = Factory.exception
+      @exception        = Factory.qs_std_error
       @run_called       = false
     end
 

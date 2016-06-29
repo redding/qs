@@ -50,7 +50,7 @@ module Qs
         handle_exception(error, daemon_data, queue_item)
       end
       raise exception
-    rescue StandardError => exception
+    rescue *Qs::ErrorHandler::STANDARD_ERROR_CLASSES => exception
       handle_exception(exception, daemon_data, queue_item)
     end
 
