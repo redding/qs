@@ -41,11 +41,11 @@ module Qs
     attr_reader :message, :handler_class
 
     def initialize(args)
-      @daemon_data     = args[:daemon_data]
-      @queue_name      = Queue::RedisKey.parse_name(args[:queue_redis_key].to_s)
-      @encoded_payload = args[:encoded_payload]
-      @message         = args[:message]
-      @handler_class   = args[:handler_class]
+      @daemon_data     = args.fetch(:daemon_data)
+      @queue_name      = get_queue_name(args.fetch(:queue_redis_key))
+      @encoded_payload = args.fetch(:encoded_payload)
+      @message         = args.fetch(:message)
+      @handler_class   = args.fetch(:handler_class)
     end
 
     def ==(other)
@@ -59,6 +59,13 @@ module Qs
         super
       end
     end
+
+    private
+
+    def get_queue_name(redis_key)
+      Queue::RedisKey.parse_name(redis_key.to_s)
+    end
+
   end
 
 end
