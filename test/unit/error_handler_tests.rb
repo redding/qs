@@ -128,7 +128,13 @@ class Qs::ErrorHandler
       exp = Qs::ErrorContext.new(@context_hash)
       assert_equal exp, subject
 
-      exp = Qs::ErrorContext.new({})
+      exp = Qs::ErrorContext.new({
+        :daemon_data     => Qs::DaemonData.new,
+        :queue_redis_key => Qs::Queue::RedisKey.new(Factory.string),
+        :encoded_payload => Factory.string,
+        :message         => Factory.string,
+        :handler_class   => Factory.string
+      })
       assert_not_equal exp, subject
     end
 
