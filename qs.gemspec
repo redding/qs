@@ -18,12 +18,12 @@ Gem::Specification.new do |gem|
   gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
   gem.require_paths = ["lib"]
 
-  gem.add_development_dependency("assert", ["~> 2.16.1"])
-  gem.add_development_dependency("scmd",   ["~> 3.0.2"])
+  gem.add_development_dependency("assert", ["~> 2.16.3"])
+  gem.add_development_dependency("scmd",   ["~> 3.0.3"])
 
   gem.add_dependency("dat-worker-pool", ["~> 0.6.3"])
-  gem.add_dependency("hella-redis",     ["~> 0.3.1"])
+  gem.add_dependency("hella-redis",     ["~> 0.4.0"])
   gem.add_dependency("much-plugin",     ["~> 0.2.0"])
-  gem.add_dependency("much-timeout",    ["~> 0.1.0"])
+  gem.add_dependency("much-timeout",    ["~> 0.1.1"])
 
 end

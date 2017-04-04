@@ -53,28 +53,28 @@ module Qs
       end
 
       def block_dequeue(*args)
-        self.redis.with{ |c| c.brpop(*args) }
+        self.redis.connection{ |c| c.brpop(*args) }
       end
 
       def append(queue_redis_key, encoded_payload)
-        self.redis.with{ |c| c.lpush(queue_redis_key, encoded_payload) }
+        self.redis.connection{ |c| c.lpush(queue_redis_key, encoded_payload) }
       end
 
       def prepend(queue_redis_key, encoded_payload)
-        self.redis.with{ |c| c.rpush(queue_redis_key, encoded_payload) }
+        self.redis.connection{ |c| c.rpush(queue_redis_key, encoded_payload) }
       end
 
       def clear(redis_key)
-        self.redis.with{ |c| c.del(redis_key) }
+        self.redis.connection{ |c| c.del(redis_key) }
       end
 
       def ping
-        self.redis.with{ |c| c.ping }
+        self.redis.connection{ |c| c.ping }
       end
 
       def sync_subscriptions(queue)
         pattern = Qs::Event::SubscribersRedisKey.new('*')
-        all_event_subs_keys = self.redis.with{ |c| c.keys(pattern) }
+        all_event_subs_keys = self.redis.connection{ |c| c.keys(pattern) }
 
         event_subs_keys = queue.event_route_names.map do |route_name|
           Qs::Event::SubscribersRedisKey.new(route_name)
@@ -87,7 +87,7 @@ module Qs
 
       def clear_subscriptions(queue)
         pattern = Qs::Event::SubscribersRedisKey.new('*')
-        event_subs_keys = self.redis.with{ |c| c.keys(pattern) }
+        event_subs_keys = self.redis.connection{ |c| c.keys(pattern) }
 
         redis_transaction do |c|
           event_subs_keys.each{ |key| c.srem(key, queue.name) }
@@ -95,7 +95,7 @@ module Qs
       end
 
       def event_subscribers(event)
-        self.redis.with{ |c| c.smembers(event.subscribers_redis_key) }
+        self.redis.connection{ |c| c.smembers(event.subscribers_redis_key) }
       end
 
       private
@@ -107,7 +107,7 @@ module Qs
       end
 
       def redis_transaction
-        self.redis.with{ |c| c.pipelined{ c.multi{ yield c } } }
+        self.redis.connection{ |c| c.pipelined{ c.multi{ yield c } } }
       end
 
     end
@@ -119,7 +119,7 @@ module Qs
 
     def initialize(*args)
       super
-      @redis = HellaRedis::Connection.new(self.redis_connect_hash)
+      @redis = HellaRedis.real(self.redis_connect_hash)
     end
 
     def push(queue_name, payload_hash)
@@ -144,8 +144,7 @@ module Qs
 
     def initialize(*args)
       super
-      require 'hella-redis/connection_spy'
-      @redis = HellaRedis::ConnectionSpy.new(self.redis_connect_hash)
+      @redis = HellaRedis.mock(self.redis_connect_hash)
       @pushed_items = []
     end
 

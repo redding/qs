@@ -27,7 +27,7 @@ module AppHandlers
     include Qs::JobHandler
 
     def run!
-      Qs.redis.with{ |c| c.set("qs-app:#{params['key']}", params['value']) }
+      Qs.redis.connection{ |c| c.set("qs-app:#{params['key']}", params['value']) }
     end
   end
 
@@ -58,7 +58,7 @@ module AppHandlers
 
     def run!
       sleep SLOW_TIME
-      Qs.redis.with{ |c| c.set('qs-app:slow', 'finished') }
+      Qs.redis.connection{ |c| c.set('qs-app:slow', 'finished') }
     end
   end
 
@@ -66,7 +66,7 @@ module AppHandlers
     include Qs::EventHandler
 
     def run!
-      Qs.redis.with{ |c| c.set("qs-app:#{params['key']}", params['value']) }
+      Qs.redis.connection{ |c| c.set("qs-app:#{params['key']}", params['value']) }
     end
   end
 
@@ -97,7 +97,7 @@ module AppHandlers
 
     def run!
       sleep SLOW_TIME
-      Qs.redis.with{ |c| c.set('qs-app:slow:event', 'finished') }
+      Qs.redis.connection{ |c| c.set('qs-app:slow:event', 'finished') }
     end
   end
 

@@ -20,7 +20,7 @@ module Qs::Daemon
     end
     teardown do
       @daemon_runner.stop if @daemon_runner
-      Qs.redis.with do |c|
+      Qs.redis.connection do |c|
         keys = c.keys('*qs-app*')
         c.pipelined{ keys.each{ |k| c.del(k) } }
       end
@@ -55,10 +55,10 @@ module Qs::Daemon
           case(route_name)
           when 'error', 'timeout', 'qs-app:error', 'qs-app:timeout'
             error = "#{exception.class}: #{exception.message}"
-            Qs.redis.with{ |c| c.set("qs-app:last_#{payload_type}_error", error) }
+            Qs.redis.connection{ |c| c.set("qs-app:last_#{payload_type}_error", error) }
           when 'slow', 'qs-app:slow'
             error = exception.class.to_s
-            Qs.redis.with{ |c| c.set("qs-app:last_#{payload_type}_error", error) }
+            Qs.redis.connection{ |c| c.set("qs-app:last_#{payload_type}_error", error) }
           end
         end
       end
@@ -92,7 +92,7 @@ module Qs::Daemon
     end
 
     should "run the job" do
-      assert_equal @value, Qs.redis.with{ |c| c.get("qs-app:#{@key}") }
+      assert_equal @value, Qs.redis.connection{ |c| c.get("qs-app:#{@key}") }
     end
 
   end
@@ -107,7 +107,7 @@ module Qs::Daemon
 
     should "run the configured error handler procs" do
       exp = "RuntimeError: #{@error_message}"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_job_error') }
     end
 
   end
@@ -123,7 +123,7 @@ module Qs::Daemon
       handler_class = AppHandlers::Timeout
       exp = "Qs::TimeoutError: #{handler_class} timed out " \
             "(#{handler_class.timeout}s)"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_job_error') }
     end
 
   end
@@ -140,7 +140,7 @@ module Qs::Daemon
     end
 
     should "run the event" do
-      assert_equal @value, Qs.redis.with{ |c| c.get("qs-app:#{@key}") }
+      assert_equal @value, Qs.redis.connection{ |c| c.get("qs-app:#{@key}") }
     end
 
   end
@@ -155,7 +155,7 @@ module Qs::Daemon
 
     should "run the configured error handler procs" do
       exp = "RuntimeError: #{@error_message}"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_event_error') }
     end
 
   end
@@ -171,7 +171,7 @@ module Qs::Daemon
       handler_class = AppHandlers::TimeoutEvent
       exp = "Qs::TimeoutError: #{handler_class} timed out " \
             "(#{handler_class.timeout}s)"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_event_error') }
     end
 
   end
@@ -196,8 +196,8 @@ module Qs::Daemon
       @app_thread.join(@nil_shutdown_timeout)
 
       assert_false @app_thread.alive?
-      assert_equal 'finished', Qs.redis.with{ |c| c.get('qs-app:slow') }
-      assert_equal 'finished', Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+      assert_equal 'finished', Qs.redis.connection{ |c| c.get('qs-app:slow') }
+      assert_equal 'finished', Qs.redis.connection{ |c| c.get('qs-app:slow:event') }
     end
 
     should "shutdown and not let the job or event finish" do
@@ -205,14 +205,14 @@ module Qs::Daemon
       @app_thread.join(@nil_shutdown_timeout)
 
       assert_false @app_thread.alive?
-      assert_nil Qs.redis.with{ |c| c.get('qs-app:slow') }
+      assert_nil Qs.redis.connection{ |c| c.get('qs-app:slow') }
 
       exp = "Qs::ShutdownError"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
-      assert_nil Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_job_error') }
+      assert_nil Qs.redis.connection{ |c| c.get('qs-app:slow:event') }
 
       exp = "Qs::ShutdownError"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_event_error') }
     end
 
   end
@@ -234,14 +234,14 @@ module Qs::Daemon
       @app_thread.join(@shutdown_timeout + JOIN_SECONDS)
 
       assert_false @app_thread.alive?
-      assert_nil Qs.redis.with{ |c| c.get('qs-app:slow') }
+      assert_nil Qs.redis.connection{ |c| c.get('qs-app:slow') }
 
       exp = "Qs::ShutdownError"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
-      assert_nil Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_job_error') }
+      assert_nil Qs.redis.connection{ |c| c.get('qs-app:slow:event') }
 
       exp = "Qs::ShutdownError"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_event_error') }
     end
 
     should "shutdown and not let the job or event finish" do
@@ -249,14 +249,14 @@ module Qs::Daemon
       @app_thread.join(@shutdown_timeout + JOIN_SECONDS)
 
       assert_false @app_thread.alive?
-      assert_nil Qs.redis.with{ |c| c.get('qs-app:slow') }
+      assert_nil Qs.redis.connection{ |c| c.get('qs-app:slow') }
 
       exp = "Qs::ShutdownError"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_job_error') }
-      assert_nil Qs.redis.with{ |c| c.get('qs-app:slow:event') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_job_error') }
+      assert_nil Qs.redis.connection{ |c| c.get('qs-app:slow:event') }
 
       exp = "Qs::ShutdownError"
-      assert_equal exp, Qs.redis.with{ |c| c.get('qs-app:last_event_error') }
+      assert_equal exp, Qs.redis.connection{ |c| c.get('qs-app:last_event_error') }
     end
 
   end
@@ -286,7 +286,7 @@ module Qs::Daemon
 
       assert_false @app_thread.alive?
 
-      encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
+      encoded_payloads = Qs.redis.connection{ |c| c.lrange(AppQueue.redis_key, 0, 3) }
       names = encoded_payloads.map{ |sp| Qs::Payload.deserialize(sp).name }
 
       ['slow1', 'slow2', 'basic1'].each{ |n| assert_includes n, names }
@@ -298,7 +298,7 @@ module Qs::Daemon
 
       assert_false @app_thread.alive?
 
-      encoded_payloads = Qs.redis.with{ |c| c.lrange(AppQueue.redis_key, 0, 4) }
+      encoded_payloads = Qs.redis.connection{ |c| c.lrange(AppQueue.redis_key, 0, 4) }
       names = encoded_payloads.map{ |sp| Qs::Payload.deserialize(sp).name }
 
       ['slow1', 'slow2', 'basic1'].each{ |n| assert_includes n, names }
