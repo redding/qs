@@ -152,7 +152,7 @@ module Qs
     end
 
     # the keys here should be compatible with HellaRedis connection configs
-    # https://github.com/redding/hella-redis#connection
+    # https://github.com/redding/hella-redis#usage
     def redis_connect_hash
       { :ip       => self.redis_ip,
         :port     => self.redis_port,

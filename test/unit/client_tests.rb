@@ -1,7 +1,7 @@
 require 'assert'
 require 'qs/client'
 
-require 'hella-redis/connection_spy'
+require 'hella-redis'
 require 'qs'
 require 'qs/job'
 require 'qs/queue'
@@ -122,18 +122,18 @@ module Qs::Client
 
   class RedisCallTests < MixinTests
     setup do
-      @connection_spy = HellaRedis::ConnectionSpy.new(@client.redis_connect_hash)
-      Assert.stub(@client, :redis){ @connection_spy }
+      mock_redis = HellaRedis.mock(@client.redis_connect_hash)
+      Assert.stub(@client, :redis){ mock_redis }
 
       @queue_redis_key = Factory.string
       @encoded_payload = Factory.string
     end
 
     should "block pop from the front of a list using `block_dequeue`" do
-      args = (1..Factory.integer(3)).map{ Factory.string } + [Factory.integer]
+      args = Factory.integer(3).times.map{ Factory.string } + [Factory.integer]
       subject.block_dequeue(*args)
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :brpop, call.command
       assert_equal args,   call.args
     end
@@ -141,7 +141,7 @@ module Qs::Client
     should "add a encoded payload to the end of a list using `append`" do
       subject.append(@queue_redis_key, @encoded_payload)
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :lpush,           call.command
       assert_equal @queue_redis_key, call.args.first
       assert_equal @encoded_payload, call.args.last
@@ -150,7 +150,7 @@ module Qs::Client
     should "add a encoded payload to the front of a list using `prepend`" do
       subject.prepend(@queue_redis_key, @encoded_payload)
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :rpush,           call.command
       assert_equal @queue_redis_key, call.args.first
       assert_equal @encoded_payload, call.args.last
@@ -159,7 +159,7 @@ module Qs::Client
     should "del a list using `clear`" do
       subject.clear(@queue_redis_key)
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :del,               call.command
       assert_equal [@queue_redis_key], call.args
     end
@@ -167,14 +167,14 @@ module Qs::Client
     should "ping redis using `ping`" do
       subject.ping
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :ping, call.command
     end
 
     should "return the events subscriber set using `event_subscribers`" do
       smembers_key = nil
       smembers = Factory.integer(3).times.map{ Factory.string }
-      Assert.stub(@connection_spy.redis_spy, :smembers) do |key|
+      Assert.stub(subject.redis.connection_spy, :smembers) do |key|
         smembers_key = key
         smembers
       end
@@ -192,7 +192,7 @@ module Qs::Client
     setup do
       @event_subs_keys = Factory.integer(3).times.map{ Factory.string }
       @keys_pattern = nil
-      Assert.stub(@connection_spy.redis_spy, :keys) do |pattern|
+      Assert.stub(subject.redis.connection_spy, :keys) do |pattern|
         @keys_pattern = pattern
         @event_subs_keys
       end
@@ -208,7 +208,7 @@ module Qs::Client
     end
 
     should "run in a pipelined transaction" do
-      calls = @connection_spy.redis_calls[0, 2]
+      calls = subject.redis.calls[0, 2]
       assert_equal [:pipelined, :multi], calls.map(&:command)
     end
 
@@ -217,7 +217,7 @@ module Qs::Client
     end
 
     should "remove the queue from all events subscribers first" do
-      calls = @connection_spy.redis_calls[2, @event_subs_keys.size]
+      calls = subject.redis.calls[2, @event_subs_keys.size]
       assert_equal @event_subs_keys.size, calls.size
       assert_equal [:srem], calls.map(&:command).uniq
       exp = @event_subs_keys.map{ |key| [key, @queue.name] }
@@ -226,7 +226,7 @@ module Qs::Client
 
     should "remove and add the queue from events subscribers" do
       start_at = 2 + @event_subs_keys.size
-      calls = @connection_spy.redis_calls[start_at..-1]
+      calls = subject.redis.calls[start_at..-1]
       exp = @queue.event_route_names.size
       assert_equal exp, calls.size
       assert_equal [:sadd], calls.map(&:command).uniq
@@ -245,7 +245,7 @@ module Qs::Client
     end
 
     should "run in a pipelined transaction" do
-      calls = @connection_spy.redis_calls[0, 2]
+      calls = subject.redis.calls[0, 2]
       assert_equal [:pipelined, :multi], calls.map(&:command)
     end
 
@@ -254,7 +254,7 @@ module Qs::Client
     end
 
     should "remove the queue from all events subscribers" do
-      calls = @connection_spy.redis_calls[2..-1]
+      calls = subject.redis.calls[2..-1]
       assert_equal @event_subs_keys.size, calls.size
       assert_equal [:srem], calls.map(&:command).uniq
       exp = @event_subs_keys.map{ |key| [key, @queue.name] }
@@ -279,9 +279,11 @@ module Qs::Client
   class QsClientInitTests < QsClientTests
     desc "when init"
     setup do
-      @connection_spy = nil
-      Assert.stub(HellaRedis::Connection, :new) do |*args|
-        @connection_spy = HellaRedis::ConnectionSpy.new(*args)
+      @mock_redis = HellaRedis.mock(@redis_connect_hash)
+      @hr_real_called_with = nil
+      Assert.stub(HellaRedis, :real) do |*args|
+        @hr_real_called_with = args
+        @mock_redis
       end
 
       @client = @client_class.new(@redis_connect_hash)
@@ -289,15 +291,15 @@ module Qs::Client
     subject{ @client }
 
     should "build a redis connection" do
-      assert_not_nil @connection_spy
-      assert_equal @connection_spy.config, subject.redis_connect_hash
-      assert_equal @connection_spy, subject.redis
+      exp = [subject.redis_connect_hash]
+      assert_equal exp, @hr_real_called_with
+      assert_equal @mock_redis, subject.redis
     end
 
     should "add jobs to the queues redis list using `enqueue`" do
       subject.enqueue(@queue, @job_name, @job_params)
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
       job = Qs::Payload.deserialize(call.args.last)
@@ -309,7 +311,7 @@ module Qs::Client
       payload_hash = { Factory.string => Factory.string }
       subject.push(@queue.name, payload_hash)
 
-      call = @connection_spy.redis_calls.last
+      call = subject.redis.calls.last
       assert_equal :lpush, call.command
       assert_equal @queue.redis_key, call.args.first
       assert_equal Qs.encode(payload_hash), call.args.last
@@ -338,6 +340,13 @@ module Qs::Client
       @serialized_job = nil
       Assert.stub(Qs::Payload, :serialize){ |job| @serialized_job = job }
 
+      @mock_redis = HellaRedis.mock(@redis_connect_hash)
+      @hr_mock_called_with = nil
+      Assert.stub(HellaRedis, :mock) do |*args|
+        @hr_mock_called_with = args
+        @mock_redis
+      end
+
       @client = @client_class.new(@redis_connect_hash)
     end
     subject{ @client }
@@ -345,9 +354,10 @@ module Qs::Client
     should have_readers :pushed_items
     should have_imeths :reset!
 
-    should "build a redis connection spy" do
-      assert_instance_of HellaRedis::ConnectionSpy, subject.redis
-      assert_equal @redis_connect_hash, subject.redis.config
+    should "build a redis mock connection" do
+      exp = [subject.redis_connect_hash]
+      assert_equal exp, @hr_mock_called_with
+      assert_equal @mock_redis, subject.redis
     end
 
     should "default its pushed items" do

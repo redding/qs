@@ -18,7 +18,7 @@ class Qs::Queue
       @other_queue.event(@event.channel, @event.name, Factory.string)
     end
     teardown do
-      Qs.redis.with do |c|
+      Qs.redis.connection do |c|
         keys = c.keys('*qs-app*')
         c.pipelined{ keys.each{ |k| c.del(k) } }
       end
@@ -37,7 +37,7 @@ class Qs::Queue
     should "store subscriptions for the queue in redis" do
       AppQueue.event_route_names.each do |route_name|
         redis_key = Qs::Event::SubscribersRedisKey.new(route_name)
-        smembers = Qs.redis.with{ |c| c.smembers(redis_key) }
+        smembers = Qs.redis.connection{ |c| c.smembers(redis_key) }
         assert_includes AppQueue.name, smembers
       end
     end
@@ -45,7 +45,7 @@ class Qs::Queue
     should "allow adding a new queues subscriptions but preserve the existing" do
       @other_queue.sync_subscriptions
 
-      smembers = Qs.redis.with{ |c| c.smembers(@event.subscribers_redis_key) }
+      smembers = Qs.redis.connection{ |c| c.smembers(@event.subscribers_redis_key) }
       assert_equal 2, smembers.size
       assert_includes AppQueue.name,     smembers
       assert_includes @other_queue.name, smembers
@@ -57,7 +57,7 @@ class Qs::Queue
       AppQueue.sync_subscriptions
 
       redis_key = Qs::Event.new('qs-app', 'basic').subscribers_redis_key
-      smembers = Qs.redis.with{ |c| c.smembers(redis_key) }
+      smembers = Qs.redis.connection{ |c| c.smembers(redis_key) }
       assert_not_includes AppQueue.name, smembers
     end
 
@@ -74,11 +74,11 @@ class Qs::Queue
     should "remove the queue from all of its events subscribers" do
       AppQueue.event_route_names.each do |route_name|
         redis_key = Qs::Event::SubscribersRedisKey.new(route_name)
-        smembers = Qs.redis.with{ |c| c.smembers(redis_key) }
+        smembers = Qs.redis.connection{ |c| c.smembers(redis_key) }
         assert_not_includes AppQueue.name, smembers
       end
 
-      smembers = Qs.redis.with{ |c| c.smembers(@event.subscribers_redis_key) }
+      smembers = Qs.redis.connection{ |c| c.smembers(@event.subscribers_redis_key) }
       assert_equal [@other_queue.name], smembers
     end
 
